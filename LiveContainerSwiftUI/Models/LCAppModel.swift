@@ -246,7 +246,8 @@ class LCAppModel: ObservableObject, Hashable {
         
         let classicMode = appInfo.defaultClassicMode
         let multitask = classicMode == 0 ? (multitask ?? shouldLaunchInMultitaskMode) : false
-        
+        LabLog.launch(appInfo.displayName() ?? "?", multitask: multitask) // combined-app fork: Lab test log
+
         if MultitaskManager.isMultitasking() || multitask,
            let currentDataFolder {
             if await bringExistingMultitaskWindowIfNeeded(dataUUID: currentDataFolder, urlScheme: urlStr) {

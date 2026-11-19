@@ -88,6 +88,30 @@ enum LabSideStoreReader {
     }
 }
 
+// MARK: - Saved log lines (survive LiveContainer relaunching after a normal app launch)
+
+extension String {
+    var labLines: [String] { isEmpty ? [] : components(separatedBy: "\n") }
+    mutating func labAppend(_ line: String) {
+        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"
+        var lines = labLines
+        lines.append("\(f.string(from: Date())) \(line)")
+        if lines.count > 40 { lines.removeFirst(lines.count - 40) }
+        self = lines.joined(separator: "\n")
+    }
+}
+
+enum LabLog {
+    /// Called from LCAppModel.runApp for every launch, from any tab.
+    static func launch(_ name: String, multitask: Bool) {
+        var log = UserDefaults.standard.string(forKey: "LCLabLogD") ?? ""
+        log.labAppend("launch \(name) as \(multitask ? "multitask" : "normal (LiveContainer becomes the app)")")
+        UserDefaults.standard.set(log, forKey: "LCLabLogD")
+        UserDefaults.standard.synchronize() // a normal launch replaces this process right after
+
+    }
+}
+
 // MARK: - View
 
 struct LCLabView: View {
@@ -95,7 +119,7 @@ struct LCLabView: View {
 
     // A
     @State private var choosingIPA = false
-    @State private var nativeInstallLog: [String] = []
+    @AppStorage("LCLabLogA") private var nativeInstallLog: String = ""
 
     // B
     @State private var snapshot: LabSideStoreSnapshot?
@@ -105,14 +129,14 @@ struct LCLabView: View {
     // C
     @State private var safariOpened = false
     @State private var safariURL = URL(string: "https://example.com")!
-    @State private var iconLog: [String] = []
+    @AppStorage("LCLabLogC") private var iconLog: String = ""
 
     // D
     @AppStorage("LCLaunchInMultitaskMode") private var launchInMultitask = false
     @AppStorage("LCLaunchMultitaskMaximized") private var launchMaximized = false
     @AppStorage("LCMaxOneAppOnStage", store: LCUtils.appGroupUserDefault) private var oneAppOnStage = false
     @AppStorage("LCMultitaskMode", store: LCUtils.appGroupUserDefault) private var multitaskMode: MultitaskMode = .virtualWindow
-    @State private var runLog: [String] = []
+    @AppStorage("LCLabLogD") private var runLog: String = ""
 
     // E
     @AppStorage("LCLabHUD", store: LCUtils.appGroupUserDefault) private var showHUD = false
@@ -128,6 +152,11 @@ struct LCLabView: View {
                     Button(copied ? "Copied ✓" : "Copy report") {
                         UIPasteboard.general.string = report()
                         copied = true
+                    }
+                    Button("Clear logs", role: .destructive) {
+                        nativeInstallLog = ""; iconLog = ""; runLog = ""
+                        LCUtils.appGroupUserDefault.removeObject(forKey: "LCLabHUDReports")
+                        copied = false
                     }
                 }
 
@@ -160,7 +189,7 @@ struct LCLabView: View {
             if !UserDefaults.sideStoreExist() {
                 Text("Built-in SideStore not found in this build.").foregroundColor(.red).font(.footnote)
             }
-            logView(nativeInstallLog)
+            logView(nativeInstallLog.labLines)
         } header: {
             Text("A · Native install via built-in SideStore")
         } footer: {
@@ -169,7 +198,6 @@ struct LCLabView: View {
     }
 
     private func handOverToSideStore(_ picked: URL) {
-        nativeInstallLog = []
         let accessing = picked.startAccessingSecurityScopedResource()
         defer { if accessing { picked.stopAccessingSecurityScopedResource() } }
         let inbox = LCPath.docPath.appendingPathComponent("LabInbox", isDirectory: true)
@@ -180,12 +208,12 @@ struct LCLabView: View {
                 try FileManager.default.removeItem(at: dest)
             }
             try FileManager.default.copyItem(at: picked, to: dest)
-            nativeInstallLog.append("copied to \(dest.path)")
+            nativeInstallLog.labAppend("copied to \(dest.path)")
         } catch {
-            nativeInstallLog.append("copy failed: \(error.localizedDescription)")
+            nativeInstallLog.labAppend("copy failed: \(error.localizedDescription)")
             return
         }
-        nativeInstallLog.append("opening SideStore with file URL")
+        nativeInstallLog.labAppend("opening SideStore with file URL")
         LCUtils.openSideStore(urlStr: dest.absoluteString)
     }
 
@@ -260,7 +288,7 @@ struct LCLabView: View {
                         .buttonStyle(.bordered)
                 }
             }
-            logView(iconLog)
+            logView(iconLog.labLines)
         } header: {
             Text("C · Home-screen icon")
         } footer: {
@@ -271,10 +299,10 @@ struct LCLabView: View {
     private func makeIconProfile(_ app: LCAppModel) {
         guard let profile = app.appInfo.generateWebClipConfig(withContainerId: app.uiSelectedContainer?.folderName, iconStyle: .Original),
               let data = try? PropertyListSerialization.data(fromPropertyList: profile, format: .xml, options: 0) else {
-            iconLog.append("\(app.displayName): profile generation failed")
+            iconLog.labAppend("\(app.displayName): profile generation failed")
             return
         }
-        iconLog.append("\(app.displayName): profile made (\(data.count) bytes), opening Safari")
+        iconLog.labAppend("\(app.displayName): profile made (\(data.count) bytes), opening Safari")
         safariURL = URL(string: "data:application/x-apple-aspen-config;base64,\(data.base64EncodedString())")!
         safariOpened = true
     }
@@ -289,7 +317,7 @@ struct LCLabView: View {
     private func copyLaunchLink(_ app: LCAppModel) {
         guard let link = launchLink(app) else { return }
         UIPasteboard.general.string = link
-        iconLog.append("\(app.displayName): link copied")
+        iconLog.labAppend("\(app.displayName): link copied")
     }
 
     // MARK: D — several apps at once
@@ -307,7 +335,7 @@ struct LCLabView: View {
                 launchInMultitask = true
                 launchMaximized = true
                 oneAppOnStage = true
-                runLog.append("preset on: multitask launch, maximized, one app on stage")
+                runLog.labAppend("preset on: multitask launch, maximized, one app on stage")
             }
             Toggle("Every launch uses Multitask", isOn: $launchInMultitask)
             Toggle("Open full screen", isOn: $launchMaximized)
@@ -319,7 +347,7 @@ struct LCLabView: View {
                     Button("Run") { run(app) }.buttonStyle(.borderedProminent)
                 }
             }
-            logView(runLog)
+            logView(runLog.labLines)
         } header: {
             Text("D · Several apps at once")
         } footer: {
@@ -328,12 +356,12 @@ struct LCLabView: View {
     }
 
     private func run(_ app: LCAppModel) {
-        runLog.append("run \(app.displayName) (multitask)")
+        runLog.labAppend("run \(app.displayName) (multitask)")
         Task {
             do {
                 try await app.runApp(multitask: true)
             } catch {
-                await MainActor.run { runLog.append("\(app.displayName): \(error.localizedDescription)") }
+                await MainActor.run { runLog.labAppend("\(app.displayName): \(error.localizedDescription)") }
             }
         }
     }
@@ -379,12 +407,12 @@ struct LCLabView: View {
     private func report() -> String {
         var r: [String] = []
         let info = Bundle.main.infoDictionary ?? [:]
-        r.append("LiveContainer \(info["CFBundleShortVersionString"] ?? "?") (combined fork, lab 1), iOS \(UIDevice.current.systemVersion)")
-        r.append("== A native install"); r += nativeInstallLog
+        r.append("LiveContainer \(info["CFBundleShortVersionString"] ?? "?") (combined fork, lab 2), iOS \(UIDevice.current.systemVersion)")
+        r.append("== A native install"); r += nativeInstallLog.labLines
         r.append("== B SideStore list"); r += snapshotLog
         for app in snapshot?.allApps ?? [] { r.append("  \(app.name) \(app.bundleIdentifier) \(daysLeft(app.expirationDate))") }
-        r.append("== C icons"); r += iconLog
-        r.append("== D multitask: LiveProcess=\(liveProcessInstalled) launchMT=\(launchInMultitask) max=\(launchMaximized) oneOnStage=\(oneAppOnStage)"); r += runLog
+        r.append("== C icons"); r += iconLog.labLines
+        r.append("== D multitask: LiveProcess=\(liveProcessInstalled) launchMT=\(launchInMultitask) max=\(launchMaximized) oneOnStage=\(oneAppOnStage)"); r += runLog.labLines
         r.append("== E games: maxFPS=\(UIScreen.main.maximumFramesPerSecond) controllers=\(GCController.controllers().count) hud=\(showHUD) category=\(info["LSApplicationCategoryType"] ?? "-") gameMode=\(info["LSSupportsGameMode"] ?? "-") freeMB=\(os_proc_available_memory() / 1_048_576)")
         if let lines = LCUtils.appGroupUserDefault.stringArray(forKey: "LCLabHUDReports") {
             r.append("== overlay reports from apps"); r += lines
