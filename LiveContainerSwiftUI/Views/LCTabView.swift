@@ -23,6 +23,12 @@ struct LCTabView: View {
     
     var body: some View {
         TabView(selection: $sharedModel.selectedTab) {
+            // combined-app fork: the app's own home screen comes first
+            ComboHomeView()
+                .tabItem {
+                    Label("Home", systemImage: "square.grid.2x2.fill")
+                }
+                .tag(LCTabIdentifier.home)
             if DataManager.shared.model.multiLCStatus != 2 {
                 LCSourcesView()
                     .tabItem {
@@ -101,6 +107,7 @@ struct LCTabView: View {
             }
         }
         .task {
+            ComboDefaults.applyOnce() // combined-app fork
             closeDuplicatedWindow()
             checkLastLaunchError()
             checkTeamId()

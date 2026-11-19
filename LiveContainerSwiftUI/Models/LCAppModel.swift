@@ -245,7 +245,14 @@ class LCAppModel: ObservableObject, Hashable {
         let currentDataFolder = containerFolderName ?? uiSelectedContainer?.folderName
         
         let classicMode = appInfo.defaultClassicMode
-        let multitask = classicMode == 0 ? (multitask ?? shouldLaunchInMultitaskMode) : false
+        let requestedMultitask = multitask
+        var multitask = classicMode == 0 ? (multitask ?? shouldLaunchInMultitaskMode) : false
+        // combined-app fork: an app that quit right after an earlier multitask launch opens normally,
+        // unless the caller explicitly asked for multitask
+        if multitask, requestedMultitask == nil, let rel = appInfo.relativeBundlePath,
+           ComboLaunchMemory.prefersNormalLaunch(bundleId: rel) {
+            multitask = false
+        }
         LabLog.launch(appInfo.displayName() ?? "?", multitask: multitask) // combined-app fork: Lab test log
 
         if MultitaskManager.isMultitasking() || multitask,

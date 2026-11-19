@@ -53,7 +53,7 @@ struct LCPath {
 }
 
 class SharedModel: ObservableObject {
-    @Published var selectedTab: LCTabIdentifier = .apps
+    @Published var selectedTab: LCTabIdentifier = .home // combined-app fork: open on the home grid
     @Published var deepLink: URL?
     
     @Published var isHiddenAppUnlocked = false
@@ -314,6 +314,7 @@ public enum LCTabIdentifier: Hashable {
     case tweaks
     case settings
     case lab // combined-app fork: Phase 1 test tab
+    case home // combined-app fork: grid of container apps
 }
 
 

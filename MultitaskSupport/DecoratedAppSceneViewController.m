@@ -15,6 +15,7 @@
 @property(nonatomic) CGRect originalFrame;
 @property(nonatomic) UIBarButtonItem *maximizeButton;
 @property(nonatomic) bool isAppTerminationRequested;
+@property(nonatomic) NSDate *comboLaunchDate; // combined-app fork: for the quick-exit fallback
 @end
 
 @implementation DecoratedAppSceneViewController
@@ -25,6 +26,7 @@
     [rootVC addChildViewController:self];
     
     _dataUUID = dataUUID;
+    _comboLaunchDate = [NSDate date];
     _scaleRatio = 1.0;
     _isMaximized = [NSUserDefaults.lcUserDefaults boolForKey:@"LCLaunchMultitaskMaximized"];
     _appSceneVC = [[AppSceneViewController alloc] initWithBundleId:bundleId dataUUID:dataUUID delegate:self];
@@ -60,7 +62,8 @@
         }
     }];
     
-    UIImage *minimizeImage = [UIImage systemImageNamed:@"minus.circle"];
+    // combined-app fork: minimise = back to the home grid, so show a house
+    UIImage *minimizeImage = [UIImage systemImageNamed:@"house.circle"];
     UIImageConfiguration *minimizeConfig = [UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightMedium];
     minimizeImage = [minimizeImage imageWithConfiguration:minimizeConfig];
     UIBarButtonItem *minimizeButton = [[UIBarButtonItem alloc] initWithImage:minimizeImage style:UIBarButtonItemStylePlain target:self action:@selector(minimizeWindow)];
@@ -250,6 +253,7 @@
 
 - (void)minimizeWindow {
     if (self.view.hidden) return;
+    [ComboNavigation showHome]; // combined-app fork
     [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
         self.view.alpha = 0;
         self.view.transform = CGAffineTransformMakeScale(0.1, 0.1);
@@ -323,7 +327,17 @@
     }
 }
 
+// combined-app fork: remember apps that can't run in multitask so they open normally next time
+- (BOOL)comboNoteQuickExitIfNeeded {
+    if (_isAppTerminationRequested || !_comboLaunchDate || !self.appSceneVC.bundleId) return NO;
+    if (-[_comboLaunchDate timeIntervalSinceNow] > ComboLaunchMemory.quickExitSeconds) return NO;
+    [ComboLaunchMemory noteQuickExitWithBundleId:self.appSceneVC.bundleId];
+    _comboLaunchDate = nil;
+    return YES;
+}
+
 - (void)appSceneVCAppDidExit:(AppSceneViewController*)vc {
+    BOOL comboQuickExit = [self comboNoteQuickExitIfNeeded];
     BOOL skipTerminationScreen = [NSUserDefaults.lcSharedDefaults boolForKey:@"LCSkipTerminatedScreen"];
     BOOL isManual = _isAppTerminationRequested;
     if(isManual || skipTerminationScreen) {
@@ -347,6 +361,9 @@
         label.lineBreakMode = NSLineBreakByWordWrapping;
         label.numberOfLines = 0;
         label.text = NSLocalizedString(@"lc.multitaskAppWindow.appTerminated", @"");
+        if (comboQuickExit) {
+            label.text = [label.text stringByAppendingString:@"\n\nThis app quit right after opening in multitask mode. Close this window and tap it again: it will open the normal way from now on."];
+        }
         label.textAlignment = NSTextAlignmentCenter;
         [self.view insertSubview:label atIndex:0];
     }
@@ -356,7 +373,11 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         if(error) {
             [vc appTerminationCleanUp];
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"lc.common.error".loc message:error.localizedDescription preferredStyle:UIAlertControllerStyleAlert];
+            NSString *message = error.localizedDescription;
+            if ([self comboNoteQuickExitIfNeeded]) {
+                message = [message stringByAppendingString:@"\n\nIt will open the normal way next time you tap it."];
+            }
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"lc.common.error".loc message:message preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"lc.common.ok".loc style:UIAlertActionStyleCancel handler:nil]];
             [alert addAction:[UIAlertAction actionWithTitle:@"lc.common.copy".loc style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                 UIPasteboard.generalPasteboard.string = error.localizedDescription;
