@@ -44,8 +44,10 @@ class ComboNavigation: NSObject {
 
 @objcMembers
 class ComboLaunchMemory: NSObject {
-    /// How soon after a multitask launch an exit counts as "couldn't run in multitask".
+    /// How soon after a multitask launch a plain exit counts as "couldn't run in multitask".
     static let quickExitSeconds: TimeInterval = 8
+    /// A launch error (the app's main returned, or it crashed) counts within this window.
+    static let quickErrorSeconds: TimeInterval = 30
 
     private static func key(_ bundleId: String) -> String { "LCComboPreferNormal.\(bundleId)" }
 
@@ -53,15 +55,70 @@ class ComboLaunchMemory: NSObject {
     static func noteQuickExit(bundleId: String) {
         UserDefaults.standard.set(true, forKey: key(bundleId))
         var log = UserDefaults.standard.string(forKey: "LCLabLogD") ?? ""
-        log.labAppend("\(bundleId) quit right after a multitask launch, will open normally next time")
+        log.labAppend("\(bundleId) quit right after a multitask launch")
         UserDefaults.standard.set(log, forKey: "LCLabLogD")
     }
 
-    static func prefersNormalLaunch(bundleId: String) -> Bool {
+    /// True after a quick exit. Private apps are offered "make shared" by the Home screen
+    /// (Shared Apps run in multitask where private ones may not); shared apps fall back to a normal launch.
+    static func hadQuickExit(bundleId: String) -> Bool {
         UserDefaults.standard.bool(forKey: key(bundleId))
+    }
+
+    static func prefersNormalLaunch(bundleId: String) -> Bool {
+        hadQuickExit(bundleId: bundleId)
     }
 
     static func clear(bundleId: String) {
         UserDefaults.standard.removeObject(forKey: key(bundleId))
+    }
+}
+
+enum ComboSharing {
+    enum Failure: LocalizedError {
+        case runningElsewhere(String)
+        var errorDescription: String? {
+            switch self {
+            case .runningElsewhere(let lc): return "Close the app in \(lc) first."
+            }
+        }
+    }
+
+    /// Same steps as App Settings → Convert to Shared App (LCAppSettingsView.moveToAppGroup),
+    /// without its confirmation alert: move the bundle, its data containers and its tweak folder
+    /// into the shared app group.
+    @MainActor
+    static func makeShared(_ model: LCAppModel, sharedModel: SharedModel) throws {
+        let appInfo = model.appInfo
+        guard !appInfo.isShared, let rel = appInfo.relativeBundlePath, let bundlePath = appInfo.bundlePath() else { return }
+        for container in appInfo.containers {
+            if let runningLC = LCSharedUtils.getContainerUsingLCScheme(withFolderName: container.folderName) {
+                throw Failure.runningElsewhere(runningLC)
+            }
+        }
+        try LCPath.ensureAppGroupPaths()
+
+        var moves: [(URL, URL)] = [(URL(fileURLWithPath: bundlePath), LCPath.lcGroupBundlePath.appendingPathComponent(rel))]
+        for container in model.uiContainers where container.storageBookMark == nil {
+            moves.append((LCPath.dataPath.appendingPathComponent(container.folderName),
+                          LCPath.lcGroupDataPath.appendingPathComponent(container.folderName)))
+        }
+        if let tweakFolder = appInfo.tweakFolder, !tweakFolder.isEmpty {
+            moves.append((LCPath.tweakPath.appendingPathComponent(tweakFolder),
+                          LCPath.lcGroupTweakPath.appendingPathComponent(tweakFolder)))
+        }
+        try LCUtils.moveFilesAtomicallyAfterPreflight(moves)
+
+        for container in model.uiContainers where container.storageBookMark == nil {
+            sharedModel.appDataFolderNames.removeAll { $0 == container.folderName }
+            container.isShared = true
+        }
+        if let tweakFolder = appInfo.tweakFolder, !tweakFolder.isEmpty {
+            sharedModel.tweakFolderNames.removeAll { $0 == tweakFolder }
+        }
+        appInfo.setBundlePath(LCPath.lcGroupBundlePath.appendingPathComponent(rel).path)
+        appInfo.isShared = true
+        model.uiIsShared = true
+        ComboLaunchMemory.clear(bundleId: rel)
     }
 }

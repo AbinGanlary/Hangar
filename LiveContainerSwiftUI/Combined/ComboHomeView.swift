@@ -17,6 +17,7 @@ struct ComboHomeView: View {
     @State private var errorText: String?
     @State private var safariOpened = false
     @State private var safariURL = URL(string: "https://example.com")!
+    @State private var fixApp: LCAppModel? // a private app that quit in multitask
 
     private let refresh = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private let columns = [GridItem(.adaptive(minimum: 74, maximum: 96), spacing: 14, alignment: .top)]
@@ -54,6 +55,19 @@ struct ComboHomeView: View {
         }
         .fullScreenCover(isPresented: $safariOpened) {
             SafariView(url: $safariURL)
+        }
+        .confirmationDialog(
+            "\(fixApp?.displayName ?? "This app") quit when opened next to other apps",
+            isPresented: Binding(get: { fixApp != nil }, set: { if !$0 { fixApp = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let app = fixApp {
+                Button("Make it a Shared App and open") { makeSharedAndOpen(app) }
+                Button("Open the normal way") { open(app, multitask: false) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Shared Apps run next to other apps. Its data moves with it. \"The normal way\" closes other running apps.")
         }
     }
 
@@ -176,9 +190,30 @@ struct ComboHomeView: View {
             }
             return
         }
+        if multitask == nil, !app.uiIsShared, let rel = app.appInfo.relativeBundlePath,
+           ComboLaunchMemory.hadQuickExit(bundleId: rel) {
+            fixApp = app
+            return
+        }
         Task {
             do {
                 try await app.runApp(multitask: multitask)
+            } catch {
+                await MainActor.run { errorText = error.localizedDescription }
+            }
+        }
+    }
+
+    private func makeSharedAndOpen(_ app: LCAppModel) {
+        do {
+            try ComboSharing.makeShared(app, sharedModel: sharedModel)
+        } catch {
+            errorText = error.localizedDescription
+            return
+        }
+        Task {
+            do {
+                try await app.runApp(multitask: true)
             } catch {
                 await MainActor.run { errorText = error.localizedDescription }
             }

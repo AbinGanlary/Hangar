@@ -328,16 +328,16 @@
 }
 
 // combined-app fork: remember apps that can't run in multitask so they open normally next time
-- (BOOL)comboNoteQuickExitIfNeeded {
+- (BOOL)comboNoteQuickExitWithin:(NSTimeInterval)window {
     if (_isAppTerminationRequested || !_comboLaunchDate || !self.appSceneVC.bundleId) return NO;
-    if (-[_comboLaunchDate timeIntervalSinceNow] > ComboLaunchMemory.quickExitSeconds) return NO;
+    if (-[_comboLaunchDate timeIntervalSinceNow] > window) return NO;
     [ComboLaunchMemory noteQuickExitWithBundleId:self.appSceneVC.bundleId];
     _comboLaunchDate = nil;
     return YES;
 }
 
 - (void)appSceneVCAppDidExit:(AppSceneViewController*)vc {
-    BOOL comboQuickExit = [self comboNoteQuickExitIfNeeded];
+    BOOL comboQuickExit = [self comboNoteQuickExitWithin:ComboLaunchMemory.quickExitSeconds];
     BOOL skipTerminationScreen = [NSUserDefaults.lcSharedDefaults boolForKey:@"LCSkipTerminatedScreen"];
     BOOL isManual = _isAppTerminationRequested;
     if(isManual || skipTerminationScreen) {
@@ -362,7 +362,7 @@
         label.numberOfLines = 0;
         label.text = NSLocalizedString(@"lc.multitaskAppWindow.appTerminated", @"");
         if (comboQuickExit) {
-            label.text = [label.text stringByAppendingString:@"\n\nThis app quit right after opening in multitask mode. Close this window and tap it again: it will open the normal way from now on."];
+            label.text = [label.text stringByAppendingString:@"\n\nThis app quit right after opening in multitask mode. Close this window and tap it on Home again to fix it."];
         }
         label.textAlignment = NSTextAlignmentCenter;
         [self.view insertSubview:label atIndex:0];
@@ -374,8 +374,8 @@
         if(error) {
             [vc appTerminationCleanUp];
             NSString *message = error.localizedDescription;
-            if ([self comboNoteQuickExitIfNeeded]) {
-                message = [message stringByAppendingString:@"\n\nIt will open the normal way next time you tap it."];
+            if ([self comboNoteQuickExitWithin:ComboLaunchMemory.quickErrorSeconds]) {
+                message = [message stringByAppendingString:@"\n\nClose this window and tap it on Home again to fix it."];
             }
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"lc.common.error".loc message:message preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"lc.common.ok".loc style:UIAlertActionStyleCancel handler:nil]];
