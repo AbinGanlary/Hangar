@@ -70,7 +70,9 @@
 	<key>GCSupportsControllerUserInteraction</key>
 	<true/>
 	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.education</string>
+	<string>public.app-category.games</string>
+	<key>LSSupportsGameMode</key>
+	<true/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>sidestore</string>

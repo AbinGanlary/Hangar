@@ -215,6 +215,7 @@
 			membershipExceptions = (
 				BackgroundTasks.m,
 				DocumentPicker.m,
+				LabHUD.m,
 				Notification.m,
 				TweakLoader.m,
 				"UIKit+GuestHooks.m",

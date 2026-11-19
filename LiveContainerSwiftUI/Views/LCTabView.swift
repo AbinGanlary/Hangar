@@ -35,6 +35,12 @@ struct LCTabView: View {
                     Label("lc.tabView.apps".loc, systemImage: "square.stack.3d.up.fill")
                 }
                 .tag(LCTabIdentifier.apps)
+            // combined-app fork: Phase 1 test tab
+            LCLabView()
+                .tabItem {
+                    Label("Lab", systemImage: "flask")
+                }
+                .tag(LCTabIdentifier.lab)
             if DataManager.shared.model.multiLCStatus != 2 {
                 LCTweaksView()
                     .tabItem{

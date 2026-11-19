@@ -313,6 +313,7 @@ public enum LCTabIdentifier: Hashable {
     case apps
     case tweaks
     case settings
+    case lab // combined-app fork: Phase 1 test tab
 }
 
 
