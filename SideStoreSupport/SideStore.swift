@@ -197,3 +197,29 @@ class RefreshHandler: NSObject, RefreshServer {
     }
     
 }
+
+// MARK: - Hangar
+
+/// Hangar's screenless native install. Hangar's UI (LiveContainerSwiftUI) can't link this framework,
+/// which is loaded at runtime, so it calls this class by its Objective-C name:
+/// +[HangarInstaller installStagedWithProgress:completion:].
+/// Hangar stages the IPA and puts its path under HangarPendingInstallPath in the app-group defaults.
+/// This starts built-in SideStore in the background (LiveProcess), like Refresh All Apps does,
+/// and runs SideStore's InstallStagedIPAIntent there. Nothing of SideStore is shown.
+@available(iOS 17.0, *)
+@objc(HangarInstaller)
+public class HangarInstaller: NSObject {
+    @objc public static func installStaged(progress: Progress, completion: @escaping (NSString?) -> Void) {
+        Task {
+            do {
+                progress.totalUnitCount = 100
+                RefreshHandler.shared.progress = progress
+                try await RefreshHandler.shared.startRefresh(identifier: "InstallStagedIPAIntent",
+                                                             mangledName: "9SideStore22InstallStagedIPAIntentV")
+                completion(nil)
+            } catch {
+                completion(error.localizedDescription as NSString)
+            }
+        }
+    }
+}

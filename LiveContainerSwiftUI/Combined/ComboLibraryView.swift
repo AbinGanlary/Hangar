@@ -227,10 +227,6 @@ struct ComboLibraryView: View {
     }
 
     private func installNatively(_ url: URL) {
-        do {
-            try ComboNativeInstall.handOver(url)
-        } catch {
-            errorText = error.localizedDescription
-        }
+        NativeInstallCenter.shared.install(url)
     }
 }

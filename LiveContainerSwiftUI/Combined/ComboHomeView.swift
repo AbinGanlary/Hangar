@@ -80,11 +80,7 @@ struct ComboHomeView: View {
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { urls in
             nativeApp = nil
             guard let url = urls.first else { return }
-            do {
-                try ComboNativeInstall.handOver(url)
-            } catch {
-                errorText = error.localizedDescription
-            }
+            NativeInstallCenter.shared.install(url)
         }, onDismiss: {
             choosingIPA = false
             nativeApp = nil
