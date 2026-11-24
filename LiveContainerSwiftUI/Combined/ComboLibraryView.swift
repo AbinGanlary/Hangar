@@ -36,6 +36,7 @@ struct ComboLibraryView: View {
                 nativeSection
                 containerSection
                 settingsSection
+                aboutSection
             }
             .navigationTitle("Library")
             .refreshable { reload() }
@@ -59,7 +60,7 @@ struct ComboLibraryView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(slotsFull
-                 ? "Container: no limit, runs next to other apps. Native: all \(slotLimit) slots are used, so SideStore will ask you to remove one."
+                 ? "Container: no limit, runs next to other apps. Native: all \(slotLimit) slots are used, so you'll be asked to remove one."
                  : "Container: no limit, runs next to other apps. Native: a real app on your Home Screen, uses 1 of \(slotLimit) slots and 1 App ID this week.")
         }
         .alert("Something went wrong", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
@@ -101,14 +102,14 @@ struct ComboLibraryView: View {
                     }
                 }
             } else {
-                Text("Open SideStore once so its app list shows up here.")
+                Text("Sign in under Account & signing to install native apps. They show up here.")
                     .foregroundColor(.secondary)
             }
             if UserDefaults.sideStoreExist() {
                 Button {
                     LCUtils.openSideStore()
                 } label: {
-                    Label("Open SideStore to refresh", systemImage: "arrow.clockwise")
+                    Label("Account & signing", systemImage: "person.badge.key")
                 }
             }
         } header: {
@@ -120,7 +121,7 @@ struct ComboLibraryView: View {
             }
         } footer: {
             if let updated = snapshot?.lastUpdated {
-                Text("Updated \(updated.formatted(.relative(presentation: .named))). Native apps need refreshing every 7 days; SideStore does it in the background.")
+                Text("Updated \(updated.formatted(.relative(presentation: .named))). Native apps need refreshing every 7 days; Hangar does it in the background.")
             }
         }
     }
@@ -157,6 +158,24 @@ struct ComboLibraryView: View {
             Text("Running apps")
         } footer: {
             Text("When an app is hidden, games pause and go quiet; music apps that play in the background keep playing. The overlay applies to apps opened after you turn it on.")
+        }
+    }
+
+    private var aboutSection: some View {
+        Section {
+            HStack {
+                Text("Version")
+                Spacer()
+                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")
+                    .foregroundColor(.secondary)
+            }
+            Link(destination: URL(string: "https://github.com/AbinGanlary/LiveContainer/tree/combined")!) {
+                Label("Source code", systemImage: "chevron.left.forwardslash.chevron.right")
+            }
+        } header: {
+            Text("About Hangar")
+        } footer: {
+            Text("Hangar is built on LiveContainer (github.com/LiveContainer/LiveContainer) and SideStore (github.com/SideStore/SideStore), both licensed under the GNU AGPL v3. Hangar's source is available under the same licence.")
         }
     }
 

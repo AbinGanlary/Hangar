@@ -234,7 +234,8 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                     }
                 }
                 ToolbarItem(placement: .topBarLeading) {
-                    if(UserDefaults.sideStoreExist()) {
+                    // Hangar: the built-in installer is reached from Library, not shown as an app here
+                    if(false && UserDefaults.sideStoreExist()) {
                         Button {
                             LCUtils.openSideStore(delegate: self)
                         } label: {

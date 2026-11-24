@@ -75,7 +75,7 @@ struct ComboHomeView: View {
             Button("Choose IPA file") { choosingIPA = true }
             Button("Cancel", role: .cancel) { nativeApp = nil }
         } message: {
-            Text("Pick this app's original IPA file. SideStore installs it as a real app: it uses 1 of your 3 slots and 1 App ID this week. The container copy and its data stay as they are.")
+            Text("Pick this app's original IPA file. Hangar installs it as a real app: it uses 1 of your 3 slots and 1 App ID this week. The container copy and its data stay as they are.")
         }
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { urls in
             nativeApp = nil
