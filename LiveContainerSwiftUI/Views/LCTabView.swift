@@ -29,6 +29,16 @@ struct LCTabView: View {
                     Label("Home", systemImage: "square.grid.2x2.fill")
                 }
                 .tag(LCTabIdentifier.home)
+            ComboLibraryView()
+                .tabItem {
+                    Label("Library", systemImage: "books.vertical.fill")
+                }
+                .tag(LCTabIdentifier.library)
+            LCAppListView()
+                .tabItem {
+                    Label("lc.tabView.apps".loc, systemImage: "square.stack.3d.up.fill")
+                }
+                .tag(LCTabIdentifier.apps)
             if DataManager.shared.model.multiLCStatus != 2 {
                 LCSourcesView()
                     .tabItem {
@@ -36,24 +46,7 @@ struct LCTabView: View {
                     }
                     .tag(LCTabIdentifier.sources)
             }
-            LCAppListView()
-                .tabItem {
-                    Label("lc.tabView.apps".loc, systemImage: "square.stack.3d.up.fill")
-                }
-                .tag(LCTabIdentifier.apps)
-            // combined-app fork: Phase 1 test tab
-            LCLabView()
-                .tabItem {
-                    Label("Lab", systemImage: "flask")
-                }
-                .tag(LCTabIdentifier.lab)
-            if DataManager.shared.model.multiLCStatus != 2 {
-                LCTweaksView()
-                    .tabItem{
-                        Label("lc.tabView.tweaks".loc, systemImage: "wrench.and.screwdriver")
-                    }
-                    .tag(LCTabIdentifier.tweaks)
-            }
+            // combined-app fork: Tweaks moved into Library to keep five tabs
             
             LCSettingsView()
                 .tabItem {

@@ -122,3 +122,45 @@ enum ComboSharing {
         ComboLaunchMemory.clear(bundleId: rel)
     }
 }
+
+@objcMembers
+class ComboSettings: NSObject {
+    static let pauseHiddenKey = "LCComboPauseHidden"
+    static let overlayKey = "LCLabHUD" // read by TweakLoader/LabHUD.m inside apps
+
+    /// Hidden multitask apps go to the background (games pause). On unless turned off in Library.
+    static var pauseHiddenApps: Bool {
+        LCUtils.appGroupUserDefault.object(forKey: pauseHiddenKey) as? Bool ?? true
+    }
+}
+
+enum ComboNativeInstall {
+    /// Copies an IPA into LiveContainer and hands it to built-in SideStore, which shows its install screen.
+    /// Installing natively uses one of the free account's 3 app slots and one App ID.
+    static func handOver(_ picked: URL) throws {
+        let accessing = picked.startAccessingSecurityScopedResource()
+        defer { if accessing { picked.stopAccessingSecurityScopedResource() } }
+        let inbox = LCPath.docPath.appendingPathComponent("LabInbox", isDirectory: true)
+        let dest = inbox.appendingPathComponent(picked.lastPathComponent)
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: dest.path) {
+            try FileManager.default.removeItem(at: dest)
+        }
+        try FileManager.default.copyItem(at: picked, to: dest)
+        LCUtils.openSideStore(urlStr: dest.absoluteString)
+    }
+
+    /// Copies a picked IPA somewhere LiveContainer can read later, for a container install via the Apps tab.
+    static func stageForContainer(_ picked: URL) throws -> URL {
+        let accessing = picked.startAccessingSecurityScopedResource()
+        defer { if accessing { picked.stopAccessingSecurityScopedResource() } }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ComboInstall", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dest = dir.appendingPathComponent(picked.lastPathComponent)
+        if FileManager.default.fileExists(atPath: dest.path) {
+            try FileManager.default.removeItem(at: dest)
+        }
+        try FileManager.default.copyItem(at: picked, to: dest)
+        return dest
+    }
+}

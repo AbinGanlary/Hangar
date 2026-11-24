@@ -18,6 +18,8 @@ struct ComboHomeView: View {
     @State private var safariOpened = false
     @State private var safariURL = URL(string: "https://example.com")!
     @State private var fixApp: LCAppModel? // a private app that quit in multitask
+    @State private var nativeApp: LCAppModel? // "Install natively…" asked for this app
+    @State private var choosingIPA = false
 
     private let refresh = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private let columns = [GridItem(.adaptive(minimum: 74, maximum: 96), spacing: 14, alignment: .top)]
@@ -69,6 +71,24 @@ struct ComboHomeView: View {
         } message: {
             Text("Shared Apps run next to other apps. Its data moves with it. \"The normal way\" closes other running apps.")
         }
+        .alert("Install \(nativeApp?.displayName ?? "app") natively", isPresented: Binding(get: { nativeApp != nil && !choosingIPA }, set: { if !$0 { nativeApp = nil } })) {
+            Button("Choose IPA file") { choosingIPA = true }
+            Button("Cancel", role: .cancel) { nativeApp = nil }
+        } message: {
+            Text("Pick this app's original IPA file. SideStore installs it as a real app: it uses 1 of your 3 slots and 1 App ID this week. The container copy and its data stay as they are.")
+        }
+        .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { urls in
+            nativeApp = nil
+            guard let url = urls.first else { return }
+            do {
+                try ComboNativeInstall.handOver(url)
+            } catch {
+                errorText = error.localizedDescription
+            }
+        }, onDismiss: {
+            choosingIPA = false
+            nativeApp = nil
+        })
     }
 
     // MARK: pieces
@@ -142,6 +162,13 @@ struct ComboHomeView: View {
                 addToHomeScreen(app)
             } label: {
                 Label("Add to Home Screen", systemImage: "plus.app")
+            }
+            if UserDefaults.sideStoreExist() {
+                Button {
+                    nativeApp = app
+                } label: {
+                    Label("Install natively…", systemImage: "iphone.badge.play")
+                }
             }
             Button {
                 sharedModel.selectedTab = .apps

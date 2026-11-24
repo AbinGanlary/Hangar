@@ -315,6 +315,7 @@ public enum LCTabIdentifier: Hashable {
     case settings
     case lab // combined-app fork: Phase 1 test tab
     case home // combined-app fork: grid of container apps
+    case library // combined-app fork: native + container apps, install choice
 }
 
 

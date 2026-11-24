@@ -617,7 +617,8 @@ class AppInfoProvider {
         let isHidden = view.isHidden || view.alpha < 0.1
         let decoratedVC = view._viewDelegate() as? DecoratedAppSceneViewController
         let isMaximized = decoratedVC?.isMaximized ?? false
-        
+        decoratedVC?.comboResume() // combined-app fork: undo the pause from minimizeWindow
+
         // when a fullscreen multitask app is brought to front, optionally hide other windows
         if UserDefaults.lcShared().bool(forKey: "LCMaxOneAppOnStage") && isMaximized {
             MultitaskDockManager.shared.minimizeAllWindows(except: decoratedVC)

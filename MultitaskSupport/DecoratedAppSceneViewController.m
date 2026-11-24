@@ -251,9 +251,26 @@
     }
 }
 
+// combined-app fork: like the real Home Screen, a hidden app's scene goes to the background.
+// Games pause; apps with background audio (music players) keep playing.
+- (void)comboPauseIfEnabled {
+    if (![ComboSettings pauseHiddenApps] || !self.appSceneVC.isAppRunning) return;
+    [self.appSceneVC updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
+        settings.foreground = NO;
+    }];
+}
+
+- (void)comboResume {
+    if (!self.appSceneVC.isAppRunning) return;
+    [self.appSceneVC updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
+        settings.foreground = YES;
+    }];
+}
+
 - (void)minimizeWindow {
     if (self.view.hidden) return;
     [ComboNavigation showHome]; // combined-app fork
+    [self comboPauseIfEnabled]; // combined-app fork
     [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
         self.view.alpha = 0;
         self.view.transform = CGAffineTransformMakeScale(0.1, 0.1);

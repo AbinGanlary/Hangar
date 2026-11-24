@@ -17,6 +17,9 @@ API_AVAILABLE(ios(16.0))
 - (void)minimizeWindowPiP;
 - (void)unminimizeWindowPiP;
 - (void)updateVerticalConstraints;
+// combined-app fork: background the hidden app's scene (games pause, audio-less apps go quiet)
+- (void)comboPauseIfEnabled;
+- (void)comboResume;
 @property(nonatomic, copy) void (^pidAvailableHandler)(NSNumber *pid, NSError *error);
 @end
 
