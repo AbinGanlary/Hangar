@@ -154,7 +154,7 @@ struct ComboSettingsView: View {
                 Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")
                     .foregroundColor(.secondary)
             }
-            Link(destination: URL(string: "https://github.com/AbinGanlary/LiveContainer/tree/combined")!) {
+            Link(destination: URL(string: "https://github.com/AbinGanlary/Hangar")!) {
                 Label("Source code", systemImage: "chevron.left.forwardslash.chevron.right")
             }
         } header: {
