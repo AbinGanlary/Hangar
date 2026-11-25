@@ -73,7 +73,7 @@ void installSideStoreHooks(void);
     if(!handler) return;
     NSObject<RefreshServer>* server = handler.server;
     Class bridge = NSClassFromString(@"HangarAuthBridge");
-    SEL sel = NSSelectorFromString(@"signInWithAppleID:password:codeProvider:completion:");
+    SEL sel = NSSelectorFromString(@"signInAppleID:password:codeProvider:completion:"); // Swift drops "With" after "signIn"
     if(!bridge || ![bridge respondsToSelector:sel]) {
         [server finish:@"This installer build can't sign in from Hangar. Update Hangar."];
         return;

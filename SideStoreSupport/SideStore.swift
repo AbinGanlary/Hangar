@@ -252,7 +252,8 @@ public class HangarInstaller: NSObject {
 @available(iOS 17.0, *)
 @objc(HangarAccount)
 public class HangarAccount: NSObject {
-    @objc public static func signIn(appleID: String,
+    @objc(signInWithAppleID:password:codeRequester:completion:)
+    public static func signIn(appleID: String,
                                     password: String,
                                     codeRequester: @escaping (String, String?, Bool, @escaping (String?) -> Void) -> Void,
                                     completion: @escaping (NSString?) -> Void) {
