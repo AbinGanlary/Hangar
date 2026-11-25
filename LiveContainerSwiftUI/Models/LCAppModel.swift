@@ -253,7 +253,6 @@ class LCAppModel: ObservableObject, Hashable {
            ComboLaunchMemory.prefersNormalLaunch(bundleId: rel) {
             multitask = false
         }
-        LabLog.launch(appInfo.displayName() ?? "?", multitask: multitask) // combined-app fork: Lab test log
 
         if MultitaskManager.isMultitasking() || multitask,
            let currentDataFolder {

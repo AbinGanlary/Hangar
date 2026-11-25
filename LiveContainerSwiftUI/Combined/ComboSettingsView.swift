@@ -151,8 +151,13 @@ struct ComboSettingsView: View {
             HStack {
                 Text("Version")
                 Spacer()
-                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")
+                Text(hangarVersion)
                     .foregroundColor(.secondary)
+            }
+            HStack {
+                Text("Based on")
+                Spacer()
+                Text(basedOn).foregroundColor(.secondary)
             }
             Link(destination: URL(string: "https://github.com/AbinGanlary/Hangar")!) {
                 Label("Source code", systemImage: "chevron.left.forwardslash.chevron.right")
@@ -165,6 +170,18 @@ struct ComboSettingsView: View {
     }
 
     // MARK: helpers
+
+    private var hangarVersion: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
+    }
+
+    private var basedOn: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        return "LiveContainer \(info["HangarBasedOnLiveContainer"] as? String ?? "?")"
+    }
 
     /// Drops the chosen pairing file where Hangar's installer picks it up the next time it starts
     /// (SideStore fork: PairingFileManager.adoptWirelessPairingRecordIfNeeded imports and removes it).

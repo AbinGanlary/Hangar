@@ -15,7 +15,7 @@ struct ComboLibraryView: View {
     @ObservedObject private var installer = NativeInstallCenter.shared
     @ObservedObject private var account = HangarAccountModel.shared
 
-    @State private var snapshot: LabSideStoreSnapshot?
+    @State private var snapshot: NativeAppsSnapshot?
     @State private var snapshotURL: URL?
 
     @State private var choosingIPA = false
@@ -151,12 +151,12 @@ struct ComboLibraryView: View {
     // MARK: helpers
 
     private func reload() {
-        let (snap, url, _) = LabSideStoreReader.load()
+        let (snap, url) = NativeAppsReader.load()
         snapshot = snap
         snapshotURL = url
     }
 
-    private func nativeIcon(for app: LabSideStoreApp) -> some View {
+    private func nativeIcon(for app: NativeApp) -> some View {
         let iconURL = snapshotURL?.deletingLastPathComponent()
             .appendingPathComponent("WidgetIcons/\(app.bundleIdentifier).png")
         let image = iconURL.flatMap { UIImage(contentsOfFile: $0.path) }

@@ -41,8 +41,8 @@ mv ./tmp/SideStoreSupport.framework Payload/LiveContainer.app/Frameworks
 
 # download SideStore
 cd tmp
-# Hangar: SideStore build with InstallStagedIPAIntent (github.com/AbinGanlary/SideStore)
-wget -O SideStore.ipa "${HANGAR_SIDESTORE_URL:-https://github.com/AbinGanlary/SideStore/releases/download/hangar/SideStore.ipa}"
+# Hangar: SideStore build with InstallStagedIPAIntent (github.com/AbinGanlary/Hangar-Installer)
+wget -O SideStore.ipa "${HANGAR_SIDESTORE_URL:-https://github.com/AbinGanlary/Hangar-Installer/releases/download/hangar/SideStore.ipa}"
 unzip SideStore.ipa
 cd ..
 

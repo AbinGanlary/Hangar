@@ -54,9 +54,6 @@ class ComboLaunchMemory: NSObject {
     /// Called from DecoratedAppSceneViewController when a multitask app exits or fails early.
     static func noteQuickExit(bundleId: String) {
         UserDefaults.standard.set(true, forKey: key(bundleId))
-        var log = UserDefaults.standard.string(forKey: "LCLabLogD") ?? ""
-        log.labAppend("\(bundleId) quit right after a multitask launch")
-        UserDefaults.standard.set(log, forKey: "LCLabLogD")
     }
 
     /// True after a quick exit. Private apps are offered "make shared" by the Home screen

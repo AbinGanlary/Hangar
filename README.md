@@ -35,7 +35,7 @@ Hangar is built on [LiveContainer](https://github.com/LiveContainer/LiveContaine
 
 ## Build
 
-Every push to `main` builds the IPA on GitHub Actions (`xcode-27` runner, Xcode 27.2), in about 2 minutes. The native installer comes from [Hangar's SideStore build](https://github.com/AbinGanlary/SideStore/releases/tag/hangar), downloaded during packaging (`.github/build_github.sh`, override with `HANGAR_SIDESTORE_URL`).
+Every push to `main` builds the IPA on GitHub Actions (`xcode-27` runner, Xcode 27.2), in about 2 minutes. The native installer comes from [Hangar's SideStore build](https://github.com/AbinGanlary/Hangar-Installer/releases/tag/hangar), downloaded during packaging (`.github/build_github.sh`, override with `HANGAR_SIDESTORE_URL`).
 
 Hangar's own code is in `LiveContainerSwiftUI/Combined/` (Home, Library, Settings, sign-in, installer bridge) plus small, marked changes in the original sources (search for `Hangar` or `combined-app fork`).
 
