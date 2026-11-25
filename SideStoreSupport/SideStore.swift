@@ -78,7 +78,7 @@ class RefreshHandler: NSObject, RefreshServer {
     
     static var shared = RefreshHandler()
     
-    func startRefresh(identifier: String, mangledName: String) async throws {
+    func startRefresh(identifier: String, mangledName: String, action: ((RefreshClient) -> Void)? = nil) async throws {
         if sideStorePid <= 0 || getpgid(sideStorePid) <= 0, let c {
             c.resume(throwing: NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Built-in SideStore quit unexpectedly"]))
             self.c = nil
@@ -152,7 +152,15 @@ class RefreshHandler: NSObject, RefreshServer {
                 }
             }
         }
-        self.client?.refreshAllApps(withIdentifier: identifier, mangledTypeName: mangledName)
+        if let action {
+            // Hangar: run something other than an intent (e.g. sign-in) in the background SideStore
+            guard let client = self.client else {
+                throw NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Hangar's installer didn't connect. Try again."])
+            }
+            action(client)
+        } else {
+            self.client?.refreshAllApps(withIdentifier: identifier, mangledTypeName: mangledName)
+        }
         
         try await withUnsafeThrowingContinuation { c in
             self.c = c
@@ -179,6 +187,19 @@ class RefreshHandler: NSObject, RefreshServer {
         client = connection.remoteObjectProxy as? RefreshClient
     }
     
+    /// Hangar: set while a Hangar sign-in runs; shows Hangar's 2FA code field.
+    var hangarCodeRequester: ((String, String?, Bool, @escaping (String?) -> Void) -> Void)?
+
+    func hangarRequestCode(withPrompt prompt: String, error: String?, canUseSMS: Bool, reply: @escaping (String?) -> Void) {
+        DispatchQueue.main.async {
+            guard let requester = self.hangarCodeRequester else {
+                reply(nil)
+                return
+            }
+            requester(prompt, error, canUseSMS, reply)
+        }
+    }
+
     func finishedLaunching() {
         launchContinuation?.resume()
         launchContinuation = nil
@@ -216,6 +237,45 @@ public class HangarInstaller: NSObject {
                 RefreshHandler.shared.progress = progress
                 try await RefreshHandler.shared.startRefresh(identifier: "InstallStagedIPAIntent",
                                                              mangledName: "9SideStore22InstallStagedIPAIntentV")
+                completion(nil)
+            } catch {
+                completion(error.localizedDescription as NSString)
+            }
+        }
+    }
+}
+
+/// Hangar's own Apple ID sign-in. Runs SideStore's sign-in in the background SideStore (LiveProcess) with
+/// HangarSignInHandler, so no SideStore screen appears; 2FA codes are asked for through codeRequester.
+/// Called by Hangar's UI by its Objective-C name:
+/// +[HangarAccount signInWithAppleID:password:codeRequester:completion:], +[HangarAccount signOutWithCompletion:].
+@available(iOS 17.0, *)
+@objc(HangarAccount)
+public class HangarAccount: NSObject {
+    @objc public static func signIn(appleID: String,
+                                    password: String,
+                                    codeRequester: @escaping (String, String?, Bool, @escaping (String?) -> Void) -> Void,
+                                    completion: @escaping (NSString?) -> Void) {
+        Task {
+            RefreshHandler.shared.hangarCodeRequester = codeRequester
+            defer { RefreshHandler.shared.hangarCodeRequester = nil }
+            do {
+                try await RefreshHandler.shared.startRefresh(identifier: "HangarSignIn", mangledName: "") { client in
+                    client.hangarSignIn(withAppleID: appleID, password: password)
+                }
+                completion(nil)
+            } catch {
+                completion(error.localizedDescription as NSString)
+            }
+        }
+    }
+
+    @objc public static func signOut(completion: @escaping (NSString?) -> Void) {
+        Task {
+            do {
+                try await RefreshHandler.shared.startRefresh(identifier: "HangarSignOut", mangledName: "") { client in
+                    client.hangarSignOut()
+                }
                 completion(nil)
             } catch {
                 completion(error.localizedDescription as NSString)

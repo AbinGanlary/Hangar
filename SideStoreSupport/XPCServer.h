@@ -16,10 +16,15 @@ __attribute__((swift_attr("@Sendable")))
 - (void)finishedLaunching;
 - (void)addNotificationRequest:(UNNotificationRequest*)request;
 - (void)removePendingNotificationRequestsWithIdentifiers:(NSArray<NSString*>*)identifiers;
+// Hangar: the background sign-in asks the host for a 2FA code. Reply with the code, @"sms", or nil to cancel.
+- (void)hangarRequestCodeWithPrompt:(NSString* _Nonnull)prompt error:(NSString* _Nullable)error canUseSMS:(BOOL)canUseSMS reply:(void (^ _Nonnull)(NSString* _Nullable code))reply;
 @end
 
 @protocol RefreshClient
 - (void)refreshAllAppsWithIdentifier:(NSString*)identifier mangledTypeName:(NSString *)mangledTypeName;
+// Hangar: sign in / out with Hangar's own screen (HangarAuthBridge in Hangar's SideStore build). Ends with -finish:.
+- (void)hangarSignInWithAppleID:(NSString* _Nonnull)appleID password:(NSString* _Nonnull)password;
+- (void)hangarSignOut;
 @end
 
 @interface LiveProcessSideStoreHandler : NSObject

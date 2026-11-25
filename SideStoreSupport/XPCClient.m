@@ -9,6 +9,7 @@
 #include "../LiveContainer/utils.h"
 #include "../LiveContainer/LCSharedUtils.h"
 @import UIKit;
+#import <objc/message.h>
 
 @interface SideStoreClient(Swift)
 - (void)performRefreshForRealWithIdentifier:(NSString*)identifier
@@ -65,6 +66,40 @@ void installSideStoreHooks(void);
         return;
     }
     [self performRefreshForRealWithIdentifier:identifier mangledTypeName:mangledTypeName server:handler.server];
+}
+
+// Hangar: forward to HangarAuthBridge (Hangar's SideStore build) and report back over XPC.
+- (void)hangarSignInWithAppleID:(NSString*)appleID password:(NSString*)password {
+    if(!handler) return;
+    NSObject<RefreshServer>* server = handler.server;
+    Class bridge = NSClassFromString(@"HangarAuthBridge");
+    SEL sel = NSSelectorFromString(@"signInWithAppleID:password:codeProvider:completion:");
+    if(!bridge || ![bridge respondsToSelector:sel]) {
+        [server finish:@"This installer build can't sign in from Hangar. Update Hangar."];
+        return;
+    }
+    void (^codeProvider)(NSString*, NSString*, BOOL, void (^)(NSString*)) = ^(NSString* prompt, NSString* error, BOOL canUseSMS, void (^reply)(NSString*)) {
+        [server hangarRequestCodeWithPrompt:prompt error:error canUseSMS:canUseSMS reply:reply];
+    };
+    void (^completion)(NSString*) = ^(NSString* error) {
+        [server finish:error];
+    };
+    ((void (*)(id, SEL, NSString*, NSString*, id, id))objc_msgSend)(bridge, sel, appleID, password, codeProvider, completion);
+}
+
+- (void)hangarSignOut {
+    if(!handler) return;
+    NSObject<RefreshServer>* server = handler.server;
+    Class bridge = NSClassFromString(@"HangarAuthBridge");
+    SEL sel = NSSelectorFromString(@"signOutWithCompletion:");
+    if(!bridge || ![bridge respondsToSelector:sel]) {
+        [server finish:@"This installer build can't sign out from Hangar. Update Hangar."];
+        return;
+    }
+    void (^completion)(NSString*) = ^(NSString* error) {
+        [server finish:error];
+    };
+    ((void (*)(id, SEL, id))objc_msgSend)(bridge, sel, completion);
 }
 
 @end

@@ -121,10 +121,10 @@ final class NativeInstallCenter: ObservableObject {
     private static func friendly(_ message: String) -> String {
         let m = message.lowercased()
         if m.contains("not signed in") || m.contains("no account") || (m.contains("apple id") && m.contains("sign")) {
-            return "Sign in to your Apple ID first: Library → Account & signing.\n\n(\(message))"
+            return "Sign in to your Apple ID first: Library → Sign in with Apple ID.\n\n(\(message))"
         }
         if m.contains("pairing") {
-            return "Hangar has no pairing file. Add one with Library → Import pairing file, or pair this iPhone under Account & signing → Settings → Pairing File Management → Wireless Pairing.\n\n(\(message))"
+            return "Hangar has no pairing file. Add one with Library → Import pairing file, or pair this iPhone under Library → Installer settings → Settings → Pairing File Management → Wireless Pairing.\n\n(\(message))"
         }
         if m.contains("vpn") || m.contains("minimuxer") || m.contains("device not connected") || m.contains("heartbeat") {
             return "Turn on LocalDevVPN, then try again.\n\n(\(message))"

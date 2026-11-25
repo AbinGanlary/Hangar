@@ -20,6 +20,9 @@ struct ComboLibraryView: View {
     @State private var pickedIPA: URL?
     @State private var errorText: String?
     @State private var choosingPairing = false
+    @State private var showSignIn = false
+    @State private var confirmSignOut = false
+    @ObservedObject private var account = HangarAccountModel.shared
     @State private var pairingNote: String?
 
     @AppStorage(ComboSettings.pauseHiddenKey, store: LCUtils.appGroupUserDefault) private var pauseHidden = true
@@ -104,14 +107,40 @@ struct ComboLibraryView: View {
                     }
                 }
             } else {
-                Text("Sign in under Account & signing to install native apps. They show up here.")
+                Text("Sign in with your Apple ID to install native apps. They show up here.")
                     .foregroundColor(.secondary)
             }
             if UserDefaults.sideStoreExist() {
+                if HangarAccountModel.available {
+                    Button {
+                        showSignIn = true
+                    } label: {
+                        HStack {
+                            Label(account.signedInAppleID ?? "Sign in with Apple ID", systemImage: "person.crop.circle")
+                            Spacer()
+                            if account.signedInAppleID != nil {
+                                Text("Signed in").font(.caption).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .contextMenu {
+                        if account.signedInAppleID != nil {
+                            Button(role: .destructive) { confirmSignOut = true } label: {
+                                Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                        }
+                    }
+                    .sheet(isPresented: $showSignIn) { HangarSignInView() }
+                    .confirmationDialog("Sign out of \(account.signedInAppleID ?? "your Apple ID")?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+                        Button("Sign out", role: .destructive) { account.signOut() }
+                    } message: {
+                        Text("Native apps keep working until they expire, but Hangar can't install or refresh them until you sign in again.")
+                    }
+                }
                 Button {
                     LCUtils.openSideStore()
                 } label: {
-                    Label("Account & signing", systemImage: "person.badge.key")
+                    Label(HangarAccountModel.available ? "Installer settings" : "Account & signing", systemImage: "gearshape.2")
                 }
                 Button {
                     choosingPairing = true
