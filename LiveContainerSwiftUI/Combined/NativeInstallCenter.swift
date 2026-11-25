@@ -124,7 +124,7 @@ final class NativeInstallCenter: ObservableObject {
             return "Sign in to your Apple ID first: Library → Account & signing.\n\n(\(message))"
         }
         if m.contains("pairing") {
-            return "Hangar has no pairing file. Add it with iLoader (Pairing file → place in Hangar/LiveContainer), or import it under Library → Account & signing → Settings.\n\n(\(message))"
+            return "Hangar has no pairing file. Add one with Library → Import pairing file, or pair this iPhone under Account & signing → Settings → Pairing File Management → Wireless Pairing.\n\n(\(message))"
         }
         if m.contains("vpn") || m.contains("minimuxer") || m.contains("device not connected") || m.contains("heartbeat") {
             return "Turn on LocalDevVPN, then try again.\n\n(\(message))"

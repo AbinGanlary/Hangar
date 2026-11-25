@@ -19,6 +19,8 @@ struct ComboLibraryView: View {
     @State private var choosingIPA = false
     @State private var pickedIPA: URL?
     @State private var errorText: String?
+    @State private var choosingPairing = false
+    @State private var pairingNote: String?
 
     @AppStorage(ComboSettings.pauseHiddenKey, store: LCUtils.appGroupUserDefault) private var pauseHidden = true
     @AppStorage(ComboSettings.overlayKey, store: LCUtils.appGroupUserDefault) private var showOverlay = false
@@ -110,6 +112,19 @@ struct ComboLibraryView: View {
                     LCUtils.openSideStore()
                 } label: {
                     Label("Account & signing", systemImage: "person.badge.key")
+                }
+                Button {
+                    choosingPairing = true
+                } label: {
+                    Label("Import pairing file", systemImage: "link.badge.plus")
+                }
+                .betterFileImporter(isPresented: $choosingPairing, types: [.item], multiple: false, callback: { urls in
+                    if let url = urls.first { importPairing(url) }
+                }, onDismiss: {
+                    choosingPairing = false
+                })
+                if let pairingNote {
+                    Text(pairingNote).font(.footnote).foregroundColor(.secondary)
                 }
             }
         } header: {
@@ -221,6 +236,28 @@ struct ComboLibraryView: View {
             let staged = try ComboNativeInstall.stageForContainer(url)
             sharedModel.selectedTab = .apps
             sharedModel.deepLink = staged
+        } catch {
+            errorText = error.localizedDescription
+        }
+    }
+
+    /// Drops the chosen pairing file where Hangar's installer picks it up the next time it starts
+    /// (SideStore fork: PairingFileManager.adoptWirelessPairingRecordIfNeeded imports and removes it).
+    private func importPairing(_ picked: URL) {
+        let ext = picked.pathExtension.lowercased()
+        guard ["mobiledevicepairing", "mobiledevicepair", "plist", "xml"].contains(ext) else {
+            errorText = "That isn't a pairing file. Pick a .mobiledevicepairing or .plist file."
+            return
+        }
+        let accessing = picked.startAccessingSecurityScopedResource()
+        defer { if accessing { picked.stopAccessingSecurityScopedResource() } }
+        do {
+            let dir = LCPath.docPath.appendingPathComponent("SideStore/Documents", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let dest = dir.appendingPathComponent("ALTPairingFile.mobiledevicepairing")
+            if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
+            try FileManager.default.copyItem(at: picked, to: dest)
+            pairingNote = "Pairing file added. Hangar uses it the next time it connects to your iPhone."
         } catch {
             errorText = error.localizedDescription
         }
