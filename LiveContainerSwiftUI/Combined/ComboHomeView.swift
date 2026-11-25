@@ -20,6 +20,10 @@ struct ComboHomeView: View {
     @State private var fixApp: LCAppModel? // a private app that quit in multitask
     @State private var nativeApp: LCAppModel? // "Install natively…" asked for this app
     @State private var choosingIPA = false
+    @State private var settingsApp: LCAppModel?   // App settings sheet
+    @State private var renameApp: LCAppModel?     // Rename alert
+    @State private var renameText = ""
+    @State private var deleteApp: LCAppModel?     // Delete confirmation
 
     private let refresh = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private let columns = [GridItem(.adaptive(minimum: 74, maximum: 96), spacing: 14, alignment: .top)]
@@ -57,6 +61,45 @@ struct ComboHomeView: View {
         }
         .fullScreenCover(isPresented: $safariOpened) {
             SafariView(url: $safariURL)
+        }
+        .sheet(item: Binding(get: { settingsApp.map(IdentifiedApp.init) }, set: { settingsApp = $0?.app })) { item in
+            NavigationView {
+                LCAppSettingsView(model: item.app)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { settingsApp = nil }
+                        }
+                    }
+            }
+            .navigationViewStyle(.stack)
+            .environmentObject(sharedModel)
+        }
+        .alert("Rename", isPresented: Binding(get: { renameApp != nil }, set: { if !$0 { renameApp = nil } })) {
+            TextField("Name", text: $renameText)
+            Button("Save") {
+                if let app = renameApp { ComboNames.setName(renameText, for: app) }
+                renameApp = nil
+            }
+            Button("Reset to original") {
+                if let app = renameApp { ComboNames.setName("", for: app) }
+                renameApp = nil
+            }
+            Button("Cancel", role: .cancel) { renameApp = nil }
+        } message: {
+            Text("Only changes the name shown in Hangar.")
+        }
+        .confirmationDialog(
+            "Delete \(deleteApp.map { ComboNames.name(for: $0) } ?? "app")?",
+            isPresented: Binding(get: { deleteApp != nil }, set: { if !$0 { deleteApp = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let app = deleteApp {
+                Button("Delete app and its data", role: .destructive) { delete(app, removeData: true) }
+                Button("Delete app, keep its data") { delete(app, removeData: false) }
+            }
+            Button("Cancel", role: .cancel) { deleteApp = nil }
+        } message: {
+            Text("Deleting its data removes saves and sign-ins and can't be undone. Kept data is used again if you reinstall the same app.")
         }
         .confirmationDialog(
             "\(fixApp?.displayName ?? "This app") quit when opened next to other apps",
@@ -100,11 +143,11 @@ struct ComboHomeView: View {
                 .font(.system(size: 44, weight: .light))
                 .foregroundColor(.secondary)
             Text("No apps yet").font(.headline)
-            Text("Add IPA files in the Apps tab. They show up here, ready to tap.")
+            Text("Add IPA files in Library. They show up here, ready to tap.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Go to Apps") { sharedModel.selectedTab = .apps }
+            Button("Go to Library") { sharedModel.selectedTab = .library }
                 .buttonStyle(.borderedProminent)
         }
         .padding(32)
@@ -124,7 +167,7 @@ struct ComboHomeView: View {
                     .frame(width: 62, height: 62)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .shadow(color: .black.opacity(0.15), radius: 3, y: 2)
-                Text(app.displayName)
+                Text(ComboNames.name(for: app))
                     .font(.caption)
                     .foregroundColor(.primary)
                     .lineLimit(1)
@@ -135,7 +178,7 @@ struct ComboHomeView: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(running ? "\(app.displayName), running" : app.displayName)
+        .accessibilityLabel(running ? "\(ComboNames.name(for: app)), running" : ComboNames.name(for: app))
         .contextMenu {
             Button {
                 open(app, multitask: nil)
@@ -166,11 +209,24 @@ struct ComboHomeView: View {
                     Label("Install natively…", systemImage: "iphone.badge.play")
                 }
             }
+            Divider()
             Button {
-                sharedModel.selectedTab = .apps
+                renameText = ComboNames.name(for: app)
+                renameApp = app
             } label: {
-                Label("Show in Apps list", systemImage: "list.bullet")
+                Label("Rename", systemImage: "pencil")
             }
+            Button {
+                settingsApp = app
+            } label: {
+                Label("App settings", systemImage: "gearshape")
+            }
+            Button(role: .destructive) {
+                deleteApp = app
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .disabled(running)
         }
     }
 
@@ -208,7 +264,8 @@ struct ComboHomeView: View {
         // Locked apps and apps that need JIT go through the Apps list, which owns Face ID and the JIT flow.
         if app.appInfo.isLocked || app.appInfo.isJITNeeded {
             if let url = launchURL(app) {
-                sharedModel.selectedTab = .apps
+                // handled by the hidden app list behind Home (Face ID and JIT live there)
+                sharedModel.selectedTab = .home
                 sharedModel.deepLink = url
             }
             return
@@ -243,6 +300,30 @@ struct ComboHomeView: View {
         }
     }
 
+    /// Same steps as the old Apps list's Uninstall (LCAppBannerViewController.uninstall), without its alerts.
+    private func delete(_ app: LCAppModel, removeData: Bool) {
+        deleteApp = nil
+        let appInfo = app.appInfo
+        let containers = appInfo.containers
+        do {
+            guard let bundlePath = appInfo.bundlePath() else { throw CocoaError(.fileNoSuchFile) }
+            try FileManager.default.removeItem(atPath: bundlePath)
+            sharedModel.apps.removeAll { $0 == app }
+            sharedModel.hiddenApps.removeAll { $0 == app }
+            if removeData {
+                for container in containers {
+                    let base = container.isShared ? LCPath.lcGroupDataPath : LCPath.dataPath
+                    try? FileManager.default.removeItem(at: base.appendingPathComponent(container.folderName))
+                    LCUtils.removeAppKeychain(dataUUID: container.folderName)
+                    sharedModel.appDataFolderNames.removeAll { $0 == container.folderName }
+                }
+            }
+            ComboNames.setName("", for: app)
+        } catch {
+            errorText = error.localizedDescription
+        }
+    }
+
     private func addToHomeScreen(_ app: LCAppModel) {
         guard let profile = app.appInfo.generateWebClipConfig(withContainerId: app.uiSelectedContainer?.folderName, iconStyle: .Original),
               let data = try? PropertyListSerialization.data(fromPropertyList: profile, format: .xml, options: 0) else {
@@ -251,5 +332,36 @@ struct ComboHomeView: View {
         }
         safariURL = URL(string: "data:application/x-apple-aspen-config;base64,\(data.base64EncodedString())")!
         safariOpened = true
+    }
+}
+
+/// Wraps an app model for `.sheet(item:)`.
+struct IdentifiedApp: Identifiable {
+    let app: LCAppModel
+    var id: ObjectIdentifier { ObjectIdentifier(app) }
+}
+
+/// Hangar-only display names for container apps (Rename on Home). Stored per app bundle folder.
+enum ComboNames {
+    private static func key(_ app: LCAppModel) -> String? {
+        app.appInfo.relativeBundlePath.map { "HangarName.\($0)" }
+    }
+
+    static func name(for app: LCAppModel) -> String {
+        if let key = key(app), let custom = LCUtils.appGroupUserDefault.string(forKey: key), !custom.isEmpty {
+            return custom
+        }
+        return app.displayName
+    }
+
+    static func setName(_ name: String, for app: LCAppModel) {
+        guard let key = key(app) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == app.displayName {
+            LCUtils.appGroupUserDefault.removeObject(forKey: key)
+        } else {
+            LCUtils.appGroupUserDefault.set(trimmed, forKey: key)
+        }
+        app.objectWillChange.send()
     }
 }

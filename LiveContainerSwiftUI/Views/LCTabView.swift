@@ -34,11 +34,6 @@ struct LCTabView: View {
                     Label("Library", systemImage: "books.vertical.fill")
                 }
                 .tag(LCTabIdentifier.library)
-            LCAppListView()
-                .tabItem {
-                    Label("lc.tabView.apps".loc, systemImage: "square.stack.3d.up.fill")
-                }
-                .tag(LCTabIdentifier.apps)
             if DataManager.shared.model.multiLCStatus != 2 {
                 LCSourcesView()
                     .tabItem {
@@ -46,13 +41,21 @@ struct LCTabView: View {
                     }
                     .tag(LCTabIdentifier.sources)
             }
-            // combined-app fork: Tweaks moved into Library to keep five tabs
-            
-            LCSettingsView()
+            // Hangar: one short Settings page; the original settings pages sit under Advanced
+            ComboSettingsView()
                 .tabItem {
                     Label("lc.tabView.settings".loc, systemImage: "gearshape.fill")
                 }
                 .tag(LCTabIdentifier.settings)
+        }
+        // Hangar: there is no Apps tab. Its view stays alive, invisible, because it still does the work
+        // behind Home: home-screen icon launches, IPA installs, Face ID and JIT launches, app removal.
+        .background {
+            LCAppListView()
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
         .overlay(alignment: .top) { NativeInstallBanner() } // Hangar: native install progress
         .downloadAlert(helper: downloadHelper)
@@ -124,11 +127,11 @@ struct LCTabView: View {
     func dispatchURL(url: URL) {
         repeat {
             if url.isFileURL {
-                sharedModel.selectedTab = .apps
+                sharedModel.selectedTab = .home
                 break
             }
             if url.scheme?.lowercased() == "sidestore" {
-                sharedModel.selectedTab = .apps
+                sharedModel.selectedTab = .home
                 break
             }
             
@@ -138,7 +141,7 @@ struct LCTabView: View {
             
             switch host {
             case "livecontainer-launch", "install", "open-web-page", "open-url":
-                sharedModel.selectedTab = .apps
+                sharedModel.selectedTab = .home
             case "certificate":
                 sharedModel.selectedTab = .settings
             case "source":

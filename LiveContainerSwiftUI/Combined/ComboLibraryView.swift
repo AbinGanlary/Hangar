@@ -1,17 +1,19 @@
 //
 //  ComboLibraryView.swift
-//  LiveContainer (combined-app fork)
+//  Hangar
 //
-//  One place for both kinds of app:
-//  - Native apps, signed by built-in SideStore: days left, slots used (free Apple ID = 3).
-//  - Install an IPA either into the container (unlimited) or natively (uses a slot).
-//  - Settings for the combined app: pause hidden apps, game overlay.
+//  Installing and keeping apps:
+//  - Install an IPA in the container (unlimited) or natively (uses one of the free Apple ID's 3 slots).
+//  - Native apps with days left, and Refresh all to renew their 7 days now.
+//  Account, pairing and app behaviour live in the Settings tab (ComboSettingsView).
 //
 
 import SwiftUI
 
 struct ComboLibraryView: View {
     @EnvironmentObject var sharedModel: SharedModel
+    @ObservedObject private var installer = NativeInstallCenter.shared
+    @ObservedObject private var account = HangarAccountModel.shared
 
     @State private var snapshot: LabSideStoreSnapshot?
     @State private var snapshotURL: URL?
@@ -19,14 +21,6 @@ struct ComboLibraryView: View {
     @State private var choosingIPA = false
     @State private var pickedIPA: URL?
     @State private var errorText: String?
-    @State private var choosingPairing = false
-    @State private var showSignIn = false
-    @State private var confirmSignOut = false
-    @ObservedObject private var account = HangarAccountModel.shared
-    @State private var pairingNote: String?
-
-    @AppStorage(ComboSettings.pauseHiddenKey, store: LCUtils.appGroupUserDefault) private var pauseHidden = true
-    @AppStorage(ComboSettings.overlayKey, store: LCUtils.appGroupUserDefault) private var showOverlay = false
 
     /// A free Apple ID can keep 3 sideloaded apps active at once.
     private let slotLimit = 3
@@ -40,14 +34,15 @@ struct ComboLibraryView: View {
                 installSection
                 nativeSection
                 containerSection
-                settingsSection
-                aboutSection
             }
             .navigationTitle("Library")
             .refreshable { reload() }
         }
         .navigationViewStyle(.stack)
         .onAppear { reload() }
+        .onChange(of: installer.phase) { phase in
+            if case .done = phase { reload() }
+        }
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { urls in
             pickedIPA = urls.first
         }, onDismiss: {
@@ -60,7 +55,7 @@ struct ComboLibraryView: View {
         ) {
             if let url = pickedIPA {
                 Button("In the container") { installInContainer(url) }
-                Button(slotsFull ? "As a native app (slots full)" : "As a native app") { installNatively(url) }
+                Button(slotsFull ? "As a native app (slots full)" : "As a native app") { installer.install(url) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -84,7 +79,7 @@ struct ComboLibraryView: View {
             } label: {
                 Label("Install an IPA…", systemImage: "square.and.arrow.down")
             }
-            .disabled(sharedModel.multiLCStatus == 2)
+            .disabled(sharedModel.multiLCStatus == 2 || installer.isBusy)
         } footer: {
             Text("You choose: in the container (unlimited) or as a native app (uses a slot). Pick native for apps that don't work in the container.")
         }
@@ -106,54 +101,19 @@ struct ComboLibraryView: View {
                             .foregroundColor(daysColor(app.expirationDate))
                     }
                 }
+                Button {
+                    installer.refreshAll()
+                } label: {
+                    Label("Refresh all now", systemImage: "arrow.clockwise")
+                }
+                .disabled(installer.isBusy)
             } else {
-                Text("Sign in with your Apple ID to install native apps. They show up here.")
+                Text(account.signedInAppleID == nil && HangarAccountModel.available
+                     ? "Sign in with your Apple ID in Settings to install native apps. They show up here."
+                     : "Native apps you install show up here.")
                     .foregroundColor(.secondary)
-            }
-            if UserDefaults.sideStoreExist() {
-                if HangarAccountModel.available {
-                    Button {
-                        showSignIn = true
-                    } label: {
-                        HStack {
-                            Label(account.signedInAppleID ?? "Sign in with Apple ID", systemImage: "person.crop.circle")
-                            Spacer()
-                            if account.signedInAppleID != nil {
-                                Text("Signed in").font(.caption).foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                    .contextMenu {
-                        if account.signedInAppleID != nil {
-                            Button(role: .destructive) { confirmSignOut = true } label: {
-                                Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                            }
-                        }
-                    }
-                    .sheet(isPresented: $showSignIn) { HangarSignInView() }
-                    .confirmationDialog("Sign out of \(account.signedInAppleID ?? "your Apple ID")?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-                        Button("Sign out", role: .destructive) { account.signOut() }
-                    } message: {
-                        Text("Native apps keep working until they expire, but Hangar can't install or refresh them until you sign in again.")
-                    }
-                }
-                Button {
-                    LCUtils.openSideStore()
-                } label: {
-                    Label(HangarAccountModel.available ? "Installer settings" : "Account & signing", systemImage: "gearshape.2")
-                }
-                Button {
-                    choosingPairing = true
-                } label: {
-                    Label("Import pairing file", systemImage: "link.badge.plus")
-                }
-                .betterFileImporter(isPresented: $choosingPairing, types: [.item], multiple: false, callback: { urls in
-                    if let url = urls.first { importPairing(url) }
-                }, onDismiss: {
-                    choosingPairing = false
-                })
-                if let pairingNote {
-                    Text(pairingNote).font(.footnote).foregroundColor(.secondary)
+                if account.signedInAppleID == nil && HangarAccountModel.available {
+                    Button("Go to Settings") { sharedModel.selectedTab = .settings }
                 }
             }
         } header: {
@@ -165,61 +125,26 @@ struct ComboLibraryView: View {
             }
         } footer: {
             if let updated = snapshot?.lastUpdated {
-                Text("Updated \(updated.formatted(.relative(presentation: .named))). Native apps need refreshing every 7 days; Hangar does it in the background.")
+                Text("Updated \(updated.formatted(.relative(presentation: .named))). Native apps last 7 days. Hangar refreshes them in the background while LocalDevVPN is on, or tap Refresh all now.")
             }
         }
     }
 
     private var containerSection: some View {
         Section {
-            HStack {
-                Label("Apps in the container", systemImage: "square.grid.2x2")
-                Spacer()
-                Text("\(sharedModel.apps.count + sharedModel.hiddenApps.count)").foregroundColor(.secondary)
-            }
             Button {
-                sharedModel.selectedTab = .apps
+                sharedModel.selectedTab = .home
             } label: {
-                Label("Manage container apps", systemImage: "list.bullet")
+                HStack {
+                    Label("Apps in the container", systemImage: "square.grid.2x2")
+                    Spacer()
+                    Text("\(sharedModel.apps.count + sharedModel.hiddenApps.count)").foregroundColor(.secondary)
+                }
             }
         } header: {
             Text("Container")
         } footer: {
-            Text("No limit and nothing expires on its own. Touch and hold an app on Home to open it the normal way, add it to your Home Screen or install it natively.")
-        }
-    }
-
-    private var settingsSection: some View {
-        Section {
-            Toggle("Pause apps hidden behind Home", isOn: $pauseHidden)
-            Toggle("Show FPS and memory in apps", isOn: $showOverlay)
-            NavigationLink {
-                LCTweakFolderView(baseUrl: LCPath.tweakPath, isRoot: true)
-            } label: {
-                Label("lc.tabView.tweaks".loc, systemImage: "wrench.and.screwdriver")
-            }
-        } header: {
-            Text("Running apps")
-        } footer: {
-            Text("When an app is hidden, games pause and go quiet; music apps that play in the background keep playing. The overlay applies to apps opened after you turn it on.")
-        }
-    }
-
-    private var aboutSection: some View {
-        Section {
-            HStack {
-                Text("Version")
-                Spacer()
-                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")
-                    .foregroundColor(.secondary)
-            }
-            Link(destination: URL(string: "https://github.com/AbinGanlary/LiveContainer/tree/combined")!) {
-                Label("Source code", systemImage: "chevron.left.forwardslash.chevron.right")
-            }
-        } header: {
-            Text("About Hangar")
-        } footer: {
-            Text("Hangar is built on LiveContainer (github.com/LiveContainer/LiveContainer) and SideStore (github.com/SideStore/SideStore), both licensed under the GNU AGPL v3. Hangar's source is available under the same licence.")
+            Text("No limit and nothing expires. Touch and hold an app on Home to rename, delete, change its settings, add it to your Home Screen or install it natively.")
         }
     }
 
@@ -263,36 +188,11 @@ struct ComboLibraryView: View {
     private func installInContainer(_ url: URL) {
         do {
             let staged = try ComboNativeInstall.stageForContainer(url)
-            sharedModel.selectedTab = .apps
+            // installed by the hidden app list behind Home
+            sharedModel.selectedTab = .home
             sharedModel.deepLink = staged
         } catch {
             errorText = error.localizedDescription
         }
-    }
-
-    /// Drops the chosen pairing file where Hangar's installer picks it up the next time it starts
-    /// (SideStore fork: PairingFileManager.adoptWirelessPairingRecordIfNeeded imports and removes it).
-    private func importPairing(_ picked: URL) {
-        let ext = picked.pathExtension.lowercased()
-        guard ["mobiledevicepairing", "mobiledevicepair", "plist", "xml"].contains(ext) else {
-            errorText = "That isn't a pairing file. Pick a .mobiledevicepairing or .plist file."
-            return
-        }
-        let accessing = picked.startAccessingSecurityScopedResource()
-        defer { if accessing { picked.stopAccessingSecurityScopedResource() } }
-        do {
-            let dir = LCPath.docPath.appendingPathComponent("SideStore/Documents", isDirectory: true)
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let dest = dir.appendingPathComponent("ALTPairingFile.mobiledevicepairing")
-            if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
-            try FileManager.default.copyItem(at: picked, to: dest)
-            pairingNote = "Pairing file added. Hangar uses it the next time it connects to your iPhone."
-        } catch {
-            errorText = error.localizedDescription
-        }
-    }
-
-    private func installNatively(_ url: URL) {
-        NativeInstallCenter.shared.install(url)
     }
 }

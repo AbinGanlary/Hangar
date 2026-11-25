@@ -17,9 +17,9 @@ final class NativeInstallCenter: ObservableObject {
 
     enum Phase: Equatable {
         case idle
-        case running(name: String, fraction: Double)
-        case done(name: String)
-        case failed(name: String, message: String)
+        case running(title: String, fraction: Double)
+        case done(text: String)
+        case failed(title: String, message: String)
     }
 
     @Published private(set) var phase: Phase = .idle
@@ -45,7 +45,7 @@ final class NativeInstallCenter: ObservableObject {
 
         guard Self.backgroundInstallerAvailable else {
             // Older installer build: fall back to showing the installer's own screen.
-            do { try ComboNativeInstall.handOver(picked) } catch { phase = .failed(name: name, message: error.localizedDescription) }
+            do { try ComboNativeInstall.handOver(picked) } catch { phase = .failed(title: "Couldn't install \(name)", message: error.localizedDescription) }
             return
         }
 
@@ -53,7 +53,7 @@ final class NativeInstallCenter: ObservableObject {
         do {
             staged = try Self.stage(picked)
         } catch {
-            phase = .failed(name: name, message: error.localizedDescription)
+            phase = .failed(title: "Couldn't install \(name)", message: error.localizedDescription)
             return
         }
 
@@ -62,12 +62,12 @@ final class NativeInstallCenter: ObservableObject {
         defaults.set(staged.path, forKey: Self.pendingPathKey)
 
         let progress = Progress(totalUnitCount: 100)
-        phase = .running(name: name, fraction: 0)
+        phase = .running(title: "Installing \(name)", fraction: 0)
         let timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
             Task { @MainActor in
                 let center = NativeInstallCenter.shared
                 guard case .running = center.phase else { return }
-                center.phase = .running(name: name, fraction: progress.fractionCompleted)
+                center.phase = .running(title: "Installing \(name)", fraction: progress.fractionCompleted)
             }
         }
 
@@ -78,14 +78,49 @@ final class NativeInstallCenter: ObservableObject {
                 let center = NativeInstallCenter.shared
                 let result = defaults.string(forKey: Self.resultKey)
                 if let error {
-                    center.phase = .failed(name: name, message: Self.friendly(error))
+                    center.phase = .failed(title: "Couldn't install \(name)", message: Self.friendly(error))
                 } else if let result, result.hasPrefix("error:") {
-                    center.phase = .failed(name: name, message: Self.friendly(String(result.dropFirst(6))))
+                    center.phase = .failed(title: "Couldn't install \(name)", message: Self.friendly(String(result.dropFirst(6))))
                 } else {
-                    center.phase = .done(name: name)
+                    center.phase = .done(text: "\(name) is installed on your Home Screen")
                 }
             }
         }
+    }
+
+    /// Renews every native app's 7 days now, in the background: SideStore's Refresh All Apps,
+    /// run through +[HangarInstaller refreshAllWithProgress:completion:].
+    func refreshAll() {
+        guard !isBusy else { return }
+        typealias Completion = @convention(block) (NSString?) -> Void
+        typealias Fn = @convention(c) (AnyObject, Selector, Progress, Completion) -> Void
+        let sel = NSSelectorFromString("refreshAllWithProgress:completion:")
+        guard let cls = NSClassFromString("HangarInstaller"), let method = class_getClassMethod(cls, sel) else {
+            phase = .failed(title: "Couldn't refresh apps", message: "This Hangar build has no background refresh.")
+            return
+        }
+        let progress = Progress(totalUnitCount: 100)
+        phase = .running(title: "Refreshing native apps", fraction: 0)
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
+            Task { @MainActor in
+                let center = NativeInstallCenter.shared
+                guard case .running = center.phase else { return }
+                center.phase = .running(title: "Refreshing native apps", fraction: progress.fractionCompleted)
+            }
+        }
+        let completion: Completion = { error in
+            Task { @MainActor in
+                timer.invalidate()
+                let center = NativeInstallCenter.shared
+                if let error {
+                    center.phase = .failed(title: "Couldn't refresh apps", message: Self.friendly(error as String))
+                } else {
+                    center.phase = .done(text: "Native apps refreshed for 7 more days")
+                }
+            }
+        }
+        let fn = unsafeBitCast(method_getImplementation(method), to: Fn.self)
+        fn(cls, sel, progress, completion)
     }
 
     // MARK: helpers
@@ -145,31 +180,31 @@ struct NativeInstallBanner: View {
             switch center.phase {
             case .idle:
                 EmptyView()
-            case .running(let name, let fraction):
+            case .running(let title, let fraction):
                 card {
                     HStack(spacing: 12) {
                         ProgressView().progressViewStyle(.circular)
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Installing \(name)").font(.subheadline.weight(.semibold))
+                            Text(title).font(.subheadline.weight(.semibold))
                             ProgressView(value: fraction)
                         }
                     }
                 }
-            case .done(let name):
+            case .done(let text):
                 card {
                     HStack(spacing: 12) {
                         Image(systemName: "checkmark.circle.fill").foregroundColor(.green).font(.title2)
-                        Text("\(name) is installed on your Home Screen").font(.subheadline.weight(.semibold))
+                        Text(text).font(.subheadline.weight(.semibold))
                         Spacer()
                         Button("OK") { center.dismiss() }
                     }
                 }
-            case .failed(let name, let message):
+            case .failed(let title, let message):
                 card {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
-                            Text("Couldn't install \(name)").font(.subheadline.weight(.semibold))
+                            Text(title).font(.subheadline.weight(.semibold))
                             Spacer()
                             Button("OK") { center.dismiss() }
                         }

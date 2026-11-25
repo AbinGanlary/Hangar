@@ -693,7 +693,7 @@ struct LCSourcesView: View {
             return
         }
         withAnimation {
-            DataManager.shared.model.selectedTab = .apps
+            DataManager.shared.model.selectedTab = .home // Hangar: no Apps tab
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             NotificationCenter.default.post(name: NSNotification.InstallAppNotification, object: ["url": downloadURL])

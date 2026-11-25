@@ -403,14 +403,14 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                     UserDefaults.standard.set(nil, forKey: "webPageToOpen")
                 }
                 
-                guard sharedModel.selectedTab == .apps, let link = sharedModel.deepLink else { return }
+                guard sharedModel.selectedTab == .home, let link = sharedModel.deepLink else { return }
                 sharedModel.deepLink = nil
                 handleURL(url: link)
                 isViewAppeared = true
             }
         }
         .onChange(of: sharedModel.deepLink) { link in
-            guard sharedModel.selectedTab == .apps, let link else { return }
+            guard sharedModel.selectedTab == .home, let link else { return }
             sharedModel.deepLink = nil
             handleURL(url: link)
         }

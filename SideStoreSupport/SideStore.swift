@@ -230,6 +230,22 @@ class RefreshHandler: NSObject, RefreshServer {
 @available(iOS 17.0, *)
 @objc(HangarInstaller)
 public class HangarInstaller: NSObject {
+    /// Hangar's manual refresh: SideStore's Refresh All Apps intent, run in the background like the Shortcut.
+    @objc(refreshAllWithProgress:completion:)
+    public static func refreshAll(progress: Progress, completion: @escaping (NSString?) -> Void) {
+        Task {
+            do {
+                progress.totalUnitCount = 100
+                RefreshHandler.shared.progress = progress
+                try await RefreshHandler.shared.startRefresh(identifier: "RefreshAllIntent",
+                                                             mangledName: "9SideStore20RefreshAllAppsIntentV")
+                completion(nil)
+            } catch {
+                completion(error.localizedDescription as NSString)
+            }
+        }
+    }
+
     @objc public static func installStaged(progress: Progress, completion: @escaping (NSString?) -> Void) {
         Task {
             do {
