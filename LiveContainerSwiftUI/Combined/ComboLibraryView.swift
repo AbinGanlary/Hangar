@@ -21,6 +21,9 @@ struct ComboLibraryView: View {
     @State private var choosingIPA = false
     @State private var pickedIPA: URL?
     @State private var errorText: String?
+    @State private var extensionIPA: URL?          // native install waiting for the extensions choice
+    @State private var extensionCount = 0
+    @State private var toggleApp: NativeApp?       // deactivate / activate confirmation
 
     /// A free Apple ID can keep 3 sideloaded apps active at once.
     private let slotLimit = 3
@@ -55,13 +58,43 @@ struct ComboLibraryView: View {
         ) {
             if let url = pickedIPA {
                 Button("In the container") { installInContainer(url) }
-                Button(slotsFull ? "As a native app (slots full)" : "As a native app") { installer.install(url) }
+                Button(slotsFull ? "As a native app (slots full)" : "As a native app") { startNativeInstall(url) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(slotsFull
                  ? "Container: no limit, runs next to other apps. Native: all \(slotLimit) slots are used, so you'll be asked to remove one."
                  : "Container: no limit, runs next to other apps. Native: a real app on your Home Screen, uses 1 of \(slotLimit) slots and 1 App ID this week.")
+        }
+        .confirmationDialog(
+            "\(extensionIPA?.deletingPathExtension().lastPathComponent ?? "This app") has \(extensionCount) extension\(extensionCount == 1 ? "" : "s")",
+            isPresented: Binding(get: { extensionIPA != nil }, set: { if !$0 { extensionIPA = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let url = extensionIPA {
+                Button("Keep, share the app's ID (uses 1 App ID)") { installer.install(url, extensionChoice: "use-main-profile") }
+                Button("Keep all (uses \(extensionCount + 1) App IDs)") { installer.install(url, extensionChoice: "keep-all") }
+                Button("Remove them (uses 1 App ID)", role: .destructive) { installer.install(url, extensionChoice: "remove-all") }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Extensions are widgets, share-sheet items and similar parts. A free Apple ID gets 10 new App IDs a week. Sharing the app's ID keeps them for free, but an extension that needs its own permissions may not fully work; keep all if so.")
+        }
+        .confirmationDialog(
+            toggleTitle,
+            isPresented: Binding(get: { toggleApp != nil }, set: { if !$0 { toggleApp = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let app = toggleApp {
+                if isActive(app) {
+                    Button("Deactivate", role: .destructive) { installer.setActive(false, bundleID: app.bundleIdentifier, name: app.name) }
+                } else {
+                    Button("Activate") { installer.setActive(true, bundleID: app.bundleIdentifier, name: app.name) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(toggleMessage)
         }
         .alert("Something went wrong", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
             Button("OK", role: .cancel) {}
@@ -89,17 +122,27 @@ struct ComboLibraryView: View {
         Section {
             if let snapshot, !snapshot.allApps.isEmpty {
                 ForEach(snapshot.allApps) { app in
-                    HStack(spacing: 12) {
-                        nativeIcon(for: app)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(app.name)
-                            Text(app.bundleIdentifier).font(.caption).foregroundColor(.secondary)
+                    Button {
+                        if !isHangar(app) { toggleApp = app }
+                    } label: {
+                        HStack(spacing: 12) {
+                            nativeIcon(for: app)
+                                .opacity(isActive(app) ? 1 : 0.4)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(app.name).foregroundColor(isActive(app) ? .primary : .secondary)
+                                Text(app.bundleIdentifier).font(.caption).foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if isActive(app) {
+                                Text(daysLeft(app.expirationDate))
+                                    .font(.subheadline.monospacedDigit())
+                                    .foregroundColor(daysColor(app.expirationDate))
+                            } else {
+                                Text("Inactive").font(.subheadline).foregroundColor(.secondary)
+                            }
                         }
-                        Spacer()
-                        Text(daysLeft(app.expirationDate))
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundColor(daysColor(app.expirationDate))
                     }
+                    .disabled(isHangar(app) || installer.isBusy)
                 }
                 Button {
                     installer.refreshAll()
@@ -125,7 +168,7 @@ struct ComboLibraryView: View {
             }
         } footer: {
             if let updated = snapshot?.lastUpdated {
-                Text("Updated \(updated.formatted(.relative(presentation: .named))). Native apps last 7 days. Hangar refreshes them in the background while LocalDevVPN is on, or tap Refresh all now.")
+                Text("Updated \(updated.formatted(.relative(presentation: .named))). Native apps last 7 days; Hangar refreshes them in the background while LocalDevVPN is on, or tap Refresh all now. Tap an app to deactivate it (frees a slot, keeps its data) or activate it again.")
             }
         }
     }
@@ -183,6 +226,40 @@ struct ComboLibraryView: View {
     private func daysColor(_ date: Date) -> Color {
         let d = days(date)
         return d <= 0 ? .red : (d <= 2 ? .orange : .secondary)
+    }
+
+    private func isActive(_ app: NativeApp) -> Bool {
+        snapshot?.activeApps.contains { $0.bundleIdentifier == app.bundleIdentifier } ?? false
+    }
+
+    /// Hangar itself is in the list too; it can't deactivate itself.
+    private func isHangar(_ app: NativeApp) -> Bool {
+        Bundle.main.bundleIdentifier?.hasPrefix(app.bundleIdentifier) ?? false
+    }
+
+    private var toggleTitle: String {
+        guard let app = toggleApp else { return "" }
+        return isActive(app) ? "Deactivate \(app.name)?" : "Activate \(app.name)?"
+    }
+
+    private var toggleMessage: String {
+        guard let app = toggleApp else { return "" }
+        if isActive(app) {
+            return "\(app.name) is removed from your Home Screen but its data is kept, and one of your \(slotLimit) slots is freed. Activate it again any time."
+        }
+        return slotsFull
+            ? "All \(slotLimit) slots are in use. Deactivate another app first."
+            : "\(app.name) is installed again with its data. Uses one of your \(slotLimit) slots."
+    }
+
+    private func startNativeInstall(_ url: URL) {
+        let count = NativeInstallCenter.extensionCount(in: url)
+        if count > 0 {
+            extensionCount = count
+            extensionIPA = url
+        } else {
+            installer.install(url)
+        }
     }
 
     private func installInContainer(_ url: URL) {

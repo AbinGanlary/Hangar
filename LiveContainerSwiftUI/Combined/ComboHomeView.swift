@@ -123,7 +123,9 @@ struct ComboHomeView: View {
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { urls in
             nativeApp = nil
             guard let url = urls.first else { return }
-            NativeInstallCenter.shared.install(url)
+            // Home has no extensions dialog: share the app's ID so no extra App IDs are used.
+            let choice = NativeInstallCenter.extensionCount(in: url) > 0 ? "use-main-profile" : nil
+            NativeInstallCenter.shared.install(url, extensionChoice: choice)
         }, onDismiss: {
             choosingIPA = false
             nativeApp = nil

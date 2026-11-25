@@ -230,6 +230,21 @@ class RefreshHandler: NSObject, RefreshServer {
 @available(iOS 17.0, *)
 @objc(HangarInstaller)
 public class HangarInstaller: NSObject {
+    /// Hangar's deactivate / activate for a native app ("deactivate" or "activate"), run in the background.
+    @objc(appAction:bundleID:completion:)
+    public static func appAction(_ action: String, bundleID: String, completion: @escaping (NSString?) -> Void) {
+        Task {
+            do {
+                try await RefreshHandler.shared.startRefresh(identifier: "HangarAppAction", mangledName: "") { client in
+                    client.hangarAppAction(action, bundleID: bundleID)
+                }
+                completion(nil)
+            } catch {
+                completion(error.localizedDescription as NSString)
+            }
+        }
+    }
+
     /// Hangar's manual refresh: SideStore's Refresh All Apps intent, run in the background like the Shortcut.
     @objc(refreshAllWithProgress:completion:)
     public static func refreshAll(progress: Progress, completion: @escaping (NSString?) -> Void) {

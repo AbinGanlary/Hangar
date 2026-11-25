@@ -39,7 +39,8 @@ final class NativeInstallCenter: ObservableObject {
 
     func dismiss() { phase = .idle }
 
-    func install(_ picked: URL) {
+    /// extensionChoice: "keep-all", "use-main-profile", "remove-all", or nil for the installer's default.
+    func install(_ picked: URL, extensionChoice: String? = nil) {
         guard !isBusy else { return }
         let name = picked.deletingPathExtension().lastPathComponent
 
@@ -59,6 +60,11 @@ final class NativeInstallCenter: ObservableObject {
 
         let defaults = LCUtils.appGroupUserDefault
         defaults.removeObject(forKey: Self.resultKey)
+        if let extensionChoice {
+            defaults.set(extensionChoice, forKey: "HangarExtensionChoice")
+        } else {
+            defaults.removeObject(forKey: "HangarExtensionChoice")
+        }
         defaults.set(staged.path, forKey: Self.pendingPathKey)
 
         let progress = Progress(totalUnitCount: 100)
@@ -121,6 +127,53 @@ final class NativeInstallCenter: ObservableObject {
         }
         let fn = unsafeBitCast(method_getImplementation(method), to: Fn.self)
         fn(cls, sel, progress, completion)
+    }
+
+    /// Deactivate (frees a slot, keeps the app's data) or activate a native app, in the background.
+    func setActive(_ active: Bool, bundleID: String, name: String) {
+        guard !isBusy else { return }
+        typealias Completion = @convention(block) (NSString?) -> Void
+        typealias Fn = @convention(c) (AnyObject, Selector, NSString, NSString, Completion) -> Void
+        let sel = NSSelectorFromString("appAction:bundleID:completion:")
+        guard let cls = NSClassFromString("HangarInstaller"), let method = class_getClassMethod(cls, sel) else {
+            phase = .failed(title: "Couldn't change \(name)", message: "This Hangar build can't do that yet.")
+            return
+        }
+        phase = .running(title: active ? "Activating \(name)" : "Deactivating \(name)", fraction: 0.5)
+        let completion: Completion = { error in
+            Task { @MainActor in
+                let center = NativeInstallCenter.shared
+                if let error {
+                    center.phase = .failed(title: active ? "Couldn't activate \(name)" : "Couldn't deactivate \(name)",
+                                           message: Self.friendly(error as String))
+                } else {
+                    center.phase = .done(text: active ? "\(name) is back on your Home Screen" : "\(name) is deactivated; its data is kept")
+                }
+            }
+        }
+        let fn = unsafeBitCast(method_getImplementation(method), to: Fn.self)
+        fn(cls, sel, (active ? "activate" : "deactivate") as NSString, bundleID as NSString, completion)
+    }
+
+    /// Number of app extensions inside an IPA (PlugIns/*.appex and Extensions/*.appex of the main app).
+    /// Reads only the end of the file, where a zip keeps its list of file names.
+    nonisolated static func extensionCount(in ipa: URL) -> Int {
+        let accessing = ipa.startAccessingSecurityScopedResource()
+        defer { if accessing { ipa.stopAccessingSecurityScopedResource() } }
+        guard let handle = try? FileHandle(forReadingFrom: ipa) else { return 0 }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let window: UInt64 = 32 * 1024 * 1024
+        try? handle.seek(toOffset: size > window ? size - window : 0)
+        guard let data = try? handle.readToEnd(),
+              let text = String(data: data, encoding: .isoLatin1),
+              let regex = try? NSRegularExpression(pattern: "Payload/[^/]+\\.app/(?:PlugIns|Extensions)/([^/]+)\\.appex/Info\\.plist")
+        else { return 0 }
+        var names = Set<String>()
+        for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            if let r = Range(match.range(at: 1), in: text) { names.insert(String(text[r])) }
+        }
+        return names.count
     }
 
     // MARK: helpers

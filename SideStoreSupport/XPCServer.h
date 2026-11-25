@@ -25,6 +25,8 @@ __attribute__((swift_attr("@Sendable")))
 // Hangar: sign in / out with Hangar's own screen (HangarAuthBridge in Hangar's SideStore build). Ends with -finish:.
 - (void)hangarSignInWithAppleID:(NSString* _Nonnull)appleID password:(NSString* _Nonnull)password;
 - (void)hangarSignOut;
+// Hangar: @"deactivate" or @"activate" a native app (HangarAppsBridge). Ends with -finish:.
+- (void)hangarAppAction:(NSString* _Nonnull)action bundleID:(NSString* _Nonnull)bundleID;
 @end
 
 @interface LiveProcessSideStoreHandler : NSObject

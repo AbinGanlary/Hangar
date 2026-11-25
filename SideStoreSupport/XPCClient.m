@@ -87,6 +87,21 @@ void installSideStoreHooks(void);
     ((void (*)(id, SEL, NSString*, NSString*, id, id))objc_msgSend)(bridge, sel, appleID, password, codeProvider, completion);
 }
 
+- (void)hangarAppAction:(NSString*)action bundleID:(NSString*)bundleID {
+    if(!handler) return;
+    NSObject<RefreshServer>* server = handler.server;
+    Class bridge = NSClassFromString(@"HangarAppsBridge");
+    SEL sel = NSSelectorFromString(@"performAction:bundleID:completion:");
+    if(!bridge || ![bridge respondsToSelector:sel]) {
+        [server finish:@"This installer build can't do that yet. Update Hangar."];
+        return;
+    }
+    void (^completion)(NSString*) = ^(NSString* error) {
+        [server finish:error];
+    };
+    ((void (*)(id, SEL, NSString*, NSString*, id))objc_msgSend)(bridge, sel, action, bundleID, completion);
+}
+
 - (void)hangarSignOut {
     if(!handler) return;
     NSObject<RefreshServer>* server = handler.server;
